@@ -1,0 +1,12 @@
+{
+  "name": "harness-doctor",
+  "description": "Harness Doctor: a page that judges your CLAUDE.md files, skills and output styles from your own sessions.",
+  "owner": { "name": "Akirakii" },
+  "plugins": [
+    {
+      "name": "harness-doctor",
+      "source": "./",
+      "description": "See which of your CLAUDE.md files, skills and output styles help and which cause trouble."
+    }
+  ]
+}

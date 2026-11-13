@@ -1,0 +1,20 @@
+{
+  "name": "harness-doctor",
+  "displayName": "Harness Doctor",
+  "version": "0.1.0",
+  "description": "See which of your CLAUDE.md files, skills and output styles help and which cause trouble, judged from your own sessions, with the exact edit to fix what fails.",
+  "author": {
+    "name": "Akirakii",
+    "url": "https://github.com/Akirakii"
+  },
+  "homepage": "https://github.com/Akirakii/harness-doctor",
+  "repository": "https://github.com/Akirakii/harness-doctor",
+  "license": "MIT",
+  "keywords": [
+    "skills",
+    "claude-md",
+    "output-style",
+    "evaluation",
+    "dashboard"
+  ]
+}

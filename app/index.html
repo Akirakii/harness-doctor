@@ -1,0 +1,605 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Harness Doctor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#FFF7EC;--card:#FFFFFF;--ink:#2B2A33;--soft:#8C8897;--line:#F0E5D4;--coral:#F2545B;--coral-bg:#FFE2DF;--blue:#3B82E0;--blue-bg:#DCEAFF;--green:#1F9D6B;--green-bg:#DDF5EA;--purple:#8B5CF6;--yellow:#E8A800}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#16141D;--card:#211E2B;--ink:#F5F2FA;--soft:#A6A1B5;--line:#302C3D;--coral:#FF6B70;--coral-bg:#3A2030;--blue:#5DA5F2;--blue-bg:#1D2C45;--green:#3DD39A;--green-bg:#173A2D;--purple:#A78BFA;--yellow:#F5C542}}
+:root[data-theme="dark"]{--bg:#16141D;--card:#211E2B;--ink:#F5F2FA;--soft:#A6A1B5;--line:#302C3D;--coral:#FF6B70;--coral-bg:#3A2030;--blue:#5DA5F2;--blue-bg:#1D2C45;--green:#3DD39A;--green-bg:#173A2D;--purple:#A78BFA;--yellow:#F5C542}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.45 Nunito,system-ui,sans-serif}
+main{max-width:980px;margin:0 auto;padding:32px 16px 110px}
+h1{font:700 42px/1.05 Fredoka,system-ui,sans-serif;margin:0;letter-spacing:-.01em}
+.bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:18px 0 22px}
+.pill{font:700 15px Nunito,system-ui,sans-serif;color:var(--ink);background:var(--card);border:2px solid var(--line);border-radius:999px;padding:8px 16px;cursor:pointer}
+.pill:disabled{opacity:.5;cursor:default}
+.pill[aria-pressed="true"]{background:var(--blue-bg);border-color:var(--blue-bg);color:var(--blue)}
+.pill[aria-pressed="false"]{color:var(--soft)}
+.go{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+#msg{color:var(--soft);font-size:15px}
+.go{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-width:190px}
+.spin{width:16px;height:16px;border-radius:50%;border:3px solid currentColor;border-right-color:transparent;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion: reduce){.spin{animation:none;border-right-color:currentColor;opacity:.5}}
+.cards{display:grid;gap:12px}
+.group{font:600 14px Fredoka,system-ui,sans-serif;color:var(--soft);text-transform:uppercase;letter-spacing:.08em;margin:10px 4px 0}
+.card{position:relative;overflow:hidden;background:var(--card);border-radius:24px;padding:16px 20px 16px 26px;display:grid;grid-template-columns:minmax(140px,auto) minmax(0,1fr) auto;gap:4px 12px;align-items:center;box-shadow:0 3px 0 var(--line);cursor:pointer;transition:transform .12s ease}
+.card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:5px;background:color-mix(in srgb,var(--kind) 65%,var(--card))}
+.card.k-rules{--kind:var(--blue)}.card.k-style{--kind:var(--purple)}.card.k-skill{--kind:var(--yellow)}
+.card:hover{transform:translateY(-2px)}
+.card.idle{box-shadow:none;background:transparent;outline:2px dashed var(--line);outline-offset:-2px}
+.card.idle>:not(.more),.card.idle::before{opacity:.55}
+.nm{font:600 23px/1.2 Fredoka,system-ui,sans-serif;overflow-wrap:anywhere}
+.sub{color:var(--soft);font-size:14px}
+.xs{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:nowrap;overflow:hidden;min-width:0;padding:4px;margin:-4px}
+.x,.ok{position:relative;flex:none;width:54px;height:54px;border-radius:18px;display:grid;place-items:center;font:700 26px/1 Fredoka,system-ui,sans-serif;cursor:default;transition:transform .1s ease}
+.x{background:var(--coral-bg);color:var(--coral)}
+.ok{background:var(--green-bg);color:var(--green)}
+.x:hover,.ok:hover{transform:scale(1.08)}
+.vsq{flex:none;width:54px;height:54px;border-radius:18px;border:2px solid var(--line);background:var(--bg);color:var(--ink);font:700 18px Fredoka,system-ui,sans-serif;cursor:pointer;display:flex;align-items:center;transition:transform .1s ease}
+.vsq:hover{transform:scale(1.08)}
+.vsq{position:relative;justify-content:center;line-height:1}
+.vsq .car{position:absolute;left:50%;transform:translateX(-50%);font-size:7px;padding:2px 10px;opacity:.2;cursor:pointer;transition:opacity .15s}
+.vsq .car.up{top:1px}.vsq .car.down{bottom:1px}
+.vsq:hover .car,.vsq:focus-visible .car{opacity:.6}
+.vsq .car:hover{opacity:1}
+.vsq .car.dim,.vsq:hover .car.dim{opacity:0;cursor:default}
+.vsq.old{border-color:var(--kind);color:var(--kind)}
+.vsq.on{background:var(--kind);border-color:var(--kind);color:var(--card)}
+.vdiff{grid-column:1/-1;border-top:2px dashed var(--line);margin-top:10px;padding-top:12px;cursor:auto}
+.vdiff h3{font:600 16px Fredoka,system-ui,sans-serif;margin:0}
+.xmore{flex:none;height:54px;display:flex;align-items:center;gap:8px;padding:0 14px;border-radius:18px;border:2px dashed var(--line);font:700 16px Fredoka,system-ui,sans-serif;white-space:nowrap}
+.xmore .mx{color:var(--coral)}.xmore .mok{color:var(--green)}
+#tip{position:fixed;z-index:10;max-width:440px;background:var(--card);color:var(--ink);border:2px solid var(--line);border-radius:16px;padding:10px 12px;box-shadow:0 10px 30px rgba(0,0,0,.25);font-size:14px;pointer-events:none}
+#tip .thead{display:flex;justify-content:space-between;align-items:baseline;gap:14px;margin-bottom:4px}
+#tip b{font:600 21px/1.2 Fredoka,system-ui,sans-serif;color:var(--coral)}
+#tip b.okc{color:var(--green)}
+#tip .tdate{color:var(--soft);font-size:13px;white-space:nowrap}
+#tip .say{margin-top:8px;padding:8px 10px;border-radius:12px;background:var(--bg);font-size:13px;line-height:1.4}
+#tip .who{display:block;font:600 12px Fredoka,system-ui,sans-serif;color:var(--soft);margin-bottom:2px}
+#tip mark{background:var(--coral-bg);color:var(--coral);font-weight:700;border-radius:5px;padding:0 3px}
+#tip .meta{margin-top:6px}
+#tip .ihead{margin-top:8px;font-weight:700}
+.x .n{position:absolute;right:6px;bottom:4px;font:700 11px Nunito,system-ui,sans-serif}
+.more{grid-column:1/-1;border-top:2px dashed var(--line);margin-top:10px;padding-top:14px;display:grid;gap:18px;cursor:auto}
+.more h3{font:600 16px Fredoka,system-ui,sans-serif;margin:0}
+.more ul{margin:0;padding:0;list-style:none;display:grid;gap:8px}
+.meta{color:var(--soft);font-size:13px}
+.fhead{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:6px}
+.mini{font:700 13px Nunito,system-ui,sans-serif;color:var(--blue);background:var(--blue-bg);border:none;border-radius:999px;padding:5px 12px;cursor:pointer}
+.mini:disabled{opacity:.6;cursor:default}
+.try{gap:10px!important}
+.try li{background:var(--bg);border-radius:16px;padding:12px 14px;display:grid;gap:8px}
+.try .tw{font:600 18px/1.45 Nunito,system-ui,sans-serif}
+.try .lab{font:700 13px Nunito,system-ui,sans-serif;color:var(--soft)}
+.try .code{font:12.5px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;word-break:break-word;border-radius:10px;padding:6px 10px}
+.try .top{display:flex;gap:14px;align-items:flex-start;justify-content:space-between}
+.try .edit{position:relative}
+.try .edit .code{padding-right:100px;outline:none;cursor:text}
+.try .edit .code:focus{box-shadow:inset 0 0 0 2px var(--green)}
+.back{position:absolute;top:6px;right:6px;font:700 13px Nunito,system-ui,sans-serif;color:var(--green);background:var(--card);border:none;border-radius:999px;padding:3px 10px;cursor:pointer}
+.try li.pick{cursor:pointer}
+.try li.picked{outline:2px solid var(--green);outline-offset:-2px}
+.use{flex:none;font:700 14px Nunito,system-ui,sans-serif;color:var(--green);background:transparent;border:2px solid var(--green-bg);border-radius:999px;padding:5px 14px;cursor:pointer}
+.use:hover{border-color:var(--green)}
+.use[aria-pressed="true"]{background:var(--green);border-color:var(--green);color:var(--card)}
+.dock{position:fixed;right:24px;bottom:24px;z-index:5;display:flex;gap:10px}
+.dock:empty{display:none}
+.still *,.still *::before,.still *::after{transition:none!important}
+.act{font:700 16px Nunito,system-ui,sans-serif;border:none;border-radius:999px;padding:13px 24px;cursor:pointer;background:var(--green);color:var(--card);box-shadow:0 8px 24px rgba(0,0,0,.28);transition:transform .1s ease}
+.act:hover{transform:translateY(-2px)}
+.act.rev{background:var(--coral-bg);color:var(--coral)}
+.act:disabled{opacity:.6;cursor:default}
+.try .cut{background:var(--coral-bg)}.try .add{background:var(--green-bg)}.try .ctx{color:var(--soft);padding-left:0}
+pre{margin:0;max-height:320px;overflow:auto;background:var(--bg);border-radius:14px;padding:10px 12px;font:12.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;word-break:break-word}
+pre .a{color:#1F9D6B;display:block}pre .d{color:var(--coral);display:block}pre .h{color:var(--soft);display:block}
+pre.clamp{max-height:170px;overflow:hidden;-webkit-mask-image:linear-gradient(#000 55%,transparent);mask-image:linear-gradient(#000 55%,transparent)}
+pre.tall{max-height:65vh}
+.quiet{color:var(--soft);font-size:15px;margin:6px 4px}
+#msg .stale{color:var(--coral);font-weight:700}
+@media (max-width:600px){.dock{right:16px;bottom:16px}h1{font-size:34px}.card{grid-template-columns:1fr auto}.xs{grid-column:1/-1;grid-row:2;justify-content:flex-start}.vsq{width:44px;height:44px}.x,.ok{width:44px;height:44px;font-size:22px}.xmore{height:44px}}
+</style>
+</head>
+<body>
+<main>
+  <h1>Harness doctor</h1>
+  <div class="bar">
+    <select class="pill" id="scope" aria-label="Project"></select>
+    <button class="pill" id="unused" type="button" aria-pressed="true">Unused skills shown</button>
+    <button class="pill" id="refresh" type="button" aria-label="Refresh">↻</button>
+    <button class="pill go" id="doctor" type="button">Run harness doctor</button>
+    <span id="msg" role="status"></span>
+  </div>
+  <section class="cards" id="cards"></section>
+</main>
+<div id="dock" class="dock"></div>
+<div id="tip" hidden></div>
+<script>
+(function () {
+  const FR = {misunderstood_request: "misread request", wrong_approach: "wrong approach", buggy_code: "buggy code", excessive_changes: "did too much"};
+  const ORDER = {"rules": 0, "output style": 1, "skill": 2};
+  const KIND_CLASS = {"rules": "k-rules", "output style": "k-style", "skill": "k-skill"};  // blue, purple, yellow stripe
+  const $ = id => document.getElementById(id);
+  let D = null, scope = "global", showUnused = true;
+  const open = new Set(), showFile = new Set(), grown = new Set();
+  try { showUnused = localStorage.getItem("showUnused") !== "0"; scope = localStorage.getItem("scope") || "global"; } catch (e) {}
+
+  const day = ms => new Date(ms).toLocaleDateString(undefined, {month: "short", day: "numeric"});
+  function h(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  const plural = (n, one, many) => n + " " + (n === 1 ? one : many);
+
+  // ---------- what's in view ----------
+  const inScope = s => scope === "global" || s.cwd === scope || s.cwd.startsWith(scope + "/");
+  const projectRows = () => D.rows.filter(r => r.scope !== "global" && (scope === r.scope || scope.startsWith(r.scope + "/")));
+  const globalRows = () => D.rows.filter(r => r.scope === "global");
+  // A version is one session's batch of edits; the latest one is what gets judged.
+  const latestOf = r => r.clusters[r.clusters.length - 1];
+  const since = r => latestOf(r) ? Date.parse(latestOf(r).end) : D.from;
+  // CLAUDE.md and the output style touch every session; a skill only the sessions that loaded it.
+  const affected = (r, s) => r.kind !== "skill" || (s.skills || []).some(u => u.name === r.name);
+  // Sessions too short to judge (under 3 messages, like a lone slash command) don't count.
+  const commandOnly = s => s.n < 3;
+  function sessionsUsing(r, from, to = Infinity) {
+    return D.sessions.filter(s => inScope(s) && !commandOnly(s) && (r.kind === "skill"
+      ? (s.skills || []).some(u => u.name === r.name && Date.parse(u.t) >= from && Date.parse(u.t) < to)
+      : s.ms >= from && s.ms < to));
+  }
+  // Version k of a file is in force from the end of its edits until the next version's edits start.
+  function windowOf(r, k) {
+    const cl = r.clusters;
+    if (!cl.length) return {from: D.from, to: Infinity};
+    return {from: Date.parse(cl[k].end), to: k + 1 < cl.length ? Date.parse(cl[k + 1].start) : Infinity};
+  }
+  const touched = r => sessionsUsing(r, since(r)).filter(s => (D.triage || {})[s.id]);  // judged sessions: what Diagnose reads
+
+  // ---------- what the doctor said ----------
+  // Per file: the triage verdict for each session, replaced by Diagnose's verdict where that version was diagnosed.
+  function diagFor(r, k) {
+    const c = r.clusters[k], d = (D.diagnoses || {})[r.id + "|" + (c ? c.end : "")];
+    return d && d.verdicts ? d : null;
+  }
+  const latestDiag = r => diagFor(r, r.clusters.length - 1);
+  function verdicts(r, k = r.clusters.length - 1) {
+    const out = new Map();
+    for (const [sid, files] of Object.entries(D.triage || {})) for (const f of files) if (f.file === r.id) out.set(sid, Object.assign({doctor: false}, f));
+    // A skill the triage saw loaded but blamed for nothing was a good use.
+    if (r.kind === "skill") for (const sid of Object.keys(D.triage || {})) {
+      const s = D.byId.get(sid);
+      if (!out.has(sid) && s && (s.skills || []).some(u => u.name === r.name)) out.set(sid, {doctor: false, verdict: "worked", line: "Loaded, and no issue traced back to it."});
+    }
+    const d = diagFor(r, k);
+    if (d) for (const vd of d.verdicts) out.set(vd.session, Object.assign({doctor: true}, vd));
+    return out;
+  }
+  const issuesOf = vd => (vd.issues || []).length ? vd.issues : [{type: "issue", line: vd.line}];
+  const verdictOf = (r, vd) => vd.verdict === "failed" ? "failed" : r.kind === "skill" || vd.verdict === "worked" ? "worked" : "none";
+  // Good (✓) and bad (✕) sessions for version k.
+  function counts(r, k) {
+    const {from, to} = windowOf(r, k);
+    let x = 0, ok = 0;
+    for (const [sid, vd] of verdicts(r, k)) {
+      const s = D.byId.get(sid), v = verdictOf(r, vd);
+      if (!s || !inScope(s) || s.ms < from || s.ms >= to) continue;
+      if (v === "worked") ok++;
+      if (v === "failed") x++;
+    }
+    return {x, ok};
+  }
+
+  // ---------- hover card ----------
+  const tip = $("tip");
+  function placeTip(e) {
+    const w = tip.offsetWidth, ht = tip.offsetHeight;
+    let x = e.clientX + 14, y = e.clientY + 16;
+    if (x + w > innerWidth - 8) x = e.clientX - w - 14;
+    if (y + ht > innerHeight - 8) y = e.clientY - ht - 14;
+    tip.style.left = Math.max(8, x) + "px"; tip.style.top = Math.max(8, y) + "px";
+  }
+  // Highlight only the words the harness doctor marked in a quote.
+  function marked(text, marks) {
+    const frag = document.createDocumentFragment(), keys = (marks || []).filter(m => m && text.includes(m));
+    if (!keys.length) { frag.append(text); return frag; }
+    const esc = keys.sort((a, b) => b.length - a.length).map(m => m.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+    text.split(new RegExp("(" + esc.join("|") + ")")).forEach((part, i) => { if (part) frag.append(i % 2 ? h("mark", null, part) : document.createTextNode(part)); });
+    return frag;
+  }
+  function showTip(e, spec) {
+    const head = h("div", "thead");
+    head.append(h("b", spec.ok ? "okc" : null, spec.head), h("span", "tdate", day(spec.ms)));
+    tip.replaceChildren(head);
+    const say = (you, marks) => { const q = h("div", "say"); q.append(h("span", "who", "You"), marked(you, marks)); return q; };
+    if (spec.items && spec.items.length > 1) {
+      for (const it of spec.items) {
+        tip.append(h("div", "ihead", it.head + (it.line ? ": " + it.line : "")));
+        if (it.you) tip.append(say(it.you, it.marks));
+      }
+    } else {
+      if (spec.line) tip.append(h("div", null, spec.line));
+      if (spec.you) tip.append(say(spec.you, spec.marks));
+    }
+    tip.hidden = false; placeTip(e);
+  }
+  addEventListener("scroll", () => { tip.hidden = true; }, {passive: true});
+  // A mark: hover it for what happened and your words at that moment.
+  function tile(cls, glyph, spec, n) {
+    const x = h("span", cls, glyph);
+    if (n > 1) x.append(h("span", "n", "×" + n));
+    x.setAttribute("aria-label", spec.head);
+    x.addEventListener("mouseenter", e => showTip(e, spec));
+    x.addEventListener("mousemove", placeTip);
+    x.addEventListener("mouseleave", () => { tip.hidden = true; });
+    return x;
+  }
+
+  // ---------- one card ----------
+  function diffPre(text) {
+    const pre = h("pre");
+    for (const line of text.split("\n")) {
+      const s = h("span", line[0] === "+" ? "a" : line[0] === "-" ? "d" : line.startsWith("@@") ? "h" : "", line || " ");
+      s.style.display = "block";
+      pre.append(s);
+    }
+    return pre;
+  }
+  function mini(label, onClick) {
+    const b = h("button", "mini", label);
+    b.type = "button";
+    b.addEventListener("click", e => { e.stopPropagation(); onClick(); renderCards(); });
+    return b;
+  }
+  const flip = (set, id) => set.has(id) ? set.delete(id) : set.add(id);
+  // The version square: which version (one session's batch of edits) is shown; the wheel steps through them.
+  const vsel = new Map(), diffOpen = new Set(), wheelAcc = new Map();
+  function versionPanel(r, k) {
+    const w = h("div", "vdiff"), head = h("div", "fhead"), cl = r.clusters, c = cl[k], text = c ? c.text : r.base;
+    if (!c) {
+      head.append(h("h3", null, "No changes in the last 30 days"));
+      if (text == null) { w.append(head); return w; }
+      head.append(mini(grown.has(r.id) ? "Fold" : "Expand", () => flip(grown, r.id)));
+      w.append(head, h("pre", grown.has(r.id) ? "tall" : "clamp", text));
+      return w;
+    }
+    const label = "v" + (k + 1) + " · " + day(Date.parse(c.end)) + " · " + plural(c.edits, "edit", "edits");
+    if (c.new) {
+      head.append(h("h3", null, label + " · new file"));
+      if (text == null) { w.append(head, h("div", "meta", "Its text wasn't recorded.")); return w; }
+      head.append(mini(grown.has(r.id) ? "Fold" : "Expand", () => flip(grown, r.id)));
+      w.append(head, h("pre", grown.has(r.id) ? "tall" : "clamp", text));
+      return w;
+    }
+    const whole = showFile.has(r.id) && text != null;
+    head.append(h("h3", null, label));
+    if (text != null) head.append(mini(whole ? "Show changes" : "Show whole file", () => flip(showFile, r.id)));
+    w.append(head, whole ? h("pre", "tall", text) : c.diff ? diffPre(c.diff) : h("div", "meta", c.what || "No text recorded."));
+    return w;
+  }
+  function versionSquare(r, k) {
+    const n = r.clusters.length, b = h("button", "vsq" + (diffOpen.has(r.id) ? " on" : n && k < n - 1 ? " old" : ""), "v" + (n ? k + 1 : 1));  // a file always has at least its current version
+    b.type = "button";
+    b.title = n ? "Version " + (k + 1) + " of " + n + " · " + day(Date.parse(r.clusters[k].end)) + " · click for the changes, scroll for other versions" : "No changes in the last 30 days";
+    const go = d => { const nk = Math.min(n - 1, Math.max(0, k + d)); if (nk !== k) { vsel.set(r.id, nk); renderCards(false); } };  // the diff stays as it is: open or closed
+    if (n > 1) {  // arrows show there are other versions; they step too, like the wheel
+      const label = b.textContent, arrow = (glyph, d, can, name) => {
+        const a = h("span", "car" + (can ? "" : " dim"), glyph);
+        a.setAttribute("aria-label", name);
+        a.addEventListener("click", e => { e.stopPropagation(); go(d); });
+        return a;
+      };
+      const up = arrow("▲", 1, k < n - 1, "Newer version"), down = arrow("▼", -1, k > 0, "Older version");
+      up.classList.add("up"); down.classList.add("down");
+      b.replaceChildren(up, h("span", "vlab", label), down);
+    }
+    b.addEventListener("click", e => { e.stopPropagation(); flip(diffOpen, r.id); renderCards(false); });
+    b.addEventListener("wheel", e => {
+      if (!n) return;
+      e.preventDefault();  // step through versions instead of scrolling the page; down = older
+      const acc = (wheelAcc.get(r.id) || 0) + (e.deltaMode === 1 ? e.deltaY * 40 : e.deltaY);
+      wheelAcc.set(r.id, Math.abs(acc) >= 40 ? 0 : acc);
+      if (Math.abs(acc) >= 40) go(acc > 0 ? -1 : 1);
+    }, {passive: false});
+    b.addEventListener("keydown", e => { if (e.key === "ArrowDown") { e.preventDefault(); go(-1); } else if (e.key === "ArrowUp") { e.preventDefault(); go(1); } });
+    return b;
+  }
+  async function post(path, body) {
+    return (await fetch(path, {method: "POST", headers: {"X-Harness-Doctor": "1", "Content-Type": "application/json"}, body: JSON.stringify(body)})).json();
+  }
+  // A floating button in the page's bottom-right corner (Apply or Revert): runs, then reloads the page's data.
+  function actButton(label, cls, busyLabel, run) {
+    const b = h("button", "act" + (cls ? " " + cls : ""), label);
+    b.type = "button";
+    b.addEventListener("click", async () => {
+      b.disabled = true; b.textContent = busyLabel;
+      let res;
+      try { res = await run(); } catch (err) { res = {ok: false, message: "Can't reach the server."}; }
+      await load(true);
+      if (!res.ok) $("msg").textContent = res.message;
+    });
+    return b;
+  }
+  // Apply: every picked edit, one file at a time. Revert: the open cards whose latest version came from Apply.
+  function paintDock() {
+    const dock = $("dock"), btns = [], n = [...picks.values()].reduce((a, s) => a + s.size, 0);
+    if (n) btns.push(actButton("Apply " + plural(n, "edit", "edits"), "", "Applying…", async () => {
+      for (const [id, set] of [...picks]) {
+        const r = D.rows.find(x => x.id === id), c = r && latestOf(r);
+        const texts = Object.fromEntries([...(edited.get(id) || new Map())].filter(([k]) => set.has(k)));
+        const res = await post("/api/apply", {row: id, version_t: c ? c.end : null, picks: [...set], texts});
+        if (!res.ok) return {ok: false, message: (r ? r.name + ": " : "") + res.message};
+        picks.delete(id); edited.delete(id);
+      }
+      return {ok: true};
+    }));
+    const back = D.rows.filter(r => open.has(r.id) && latestOf(r) && latestOf(r).applied);
+    if (back.length) btns.push(actButton(back.length > 1 ? "Revert " + back.length + " files" : "Revert " + back[0].name, "rev", "Reverting…", async () => {
+      for (const r of back) {
+        const res = await post("/api/revert", {row: r.id});
+        if (!res.ok) return {ok: false, message: r.name + ": " + res.message};
+      }
+      return {ok: true};
+    }));
+    dock.replaceChildren(...btns);
+  }
+  // A suggested edit: why, then the exact lines to cut (red) and add (green); "after" says where an addition goes.
+  // Its toggle picks it for Apply.
+  const picks = new Map();  // file -> indexes of the suggestions picked for Apply
+  const edited = new Map();  // file -> (index -> the green text as the user edited it)
+  function tryItem(t, r, i, pickable) {
+    const li = h("li");
+    if (typeof t === "string") { li.append(h("div", "tw", t)); return li; }
+    const top = h("div", "top");
+    top.append(h("div", "tw", t.why || ""));
+    li.append(top);
+    if (pickable && (t.find || t.text)) {  // "Use" picks it for Apply
+      const on = (picks.get(r.id) || new Set()).has(i), use = h("button", "use", on ? "✓ Use" : "Use");
+      use.type = "button";
+      use.setAttribute("aria-pressed", String(on));
+      if (on) li.classList.add("picked");
+      use.addEventListener("click", e => {  // flips in place: no redraw, so the card stays still
+        e.stopPropagation();
+        const s = picks.get(r.id) || new Set(), now = !s.has(i);
+        now ? s.add(i) : s.delete(i);
+        s.size ? picks.set(r.id, s) : picks.delete(r.id);
+        use.setAttribute("aria-pressed", String(now)); use.textContent = now ? "✓ Use" : "Use";
+        li.classList.toggle("picked", now);
+        paintDock();
+      });
+      top.append(use);
+      // A click anywhere else on the suggestion flips Use too; not in the green box (that's for editing) or after selecting text.
+      li.classList.add("pick");
+      li.addEventListener("click", e => { if (!e.target.closest(".edit") && !String(getSelection())) use.click(); });
+    }
+    const block = (label, cls, text) => {
+      if (cls !== "add" || !pickable) { li.append(h("div", "lab", label), h("div", "code " + cls, text)); return; }
+      // The green text can be edited before Apply; Revert puts the suggested text back.
+      const wrap = h("div", "edit"), code = h("div", "code add"), back = h("button", "back", "↺ Revert"), mine = edited.get(r.id) || new Map();
+      code.textContent = mine.has(i) ? mine.get(i) : text;
+      try { code.contentEditable = "plaintext-only"; } catch (err) { code.contentEditable = "true"; }
+      code.spellcheck = false;
+      code.title = "Click to edit";
+      back.type = "button";
+      back.hidden = !mine.has(i);
+      code.addEventListener("input", () => {
+        const m = edited.get(r.id) || new Map(), now = code.innerText;
+        now === text ? m.delete(i) : m.set(i, now);
+        m.size ? edited.set(r.id, m) : edited.delete(r.id);
+        back.hidden = now === text;
+      });
+      back.addEventListener("click", e => {
+        e.stopPropagation();
+        code.textContent = text;
+        const m = edited.get(r.id);
+        if (m) { m.delete(i); if (!m.size) edited.delete(r.id); }
+        back.hidden = true;
+      });
+      wrap.append(code, back);
+      li.append(h("div", "lab", label), wrap);
+    };
+    if (t.find && t.text) { block("Replace", "cut", t.find); block("With", "add", t.text); }
+    else if (t.find) block("Cut", "cut", t.find);
+    else if (t.text) { if (t.after) block("Add after", "ctx", t.after); block(t.after ? "This" : "Add", "add", t.text); }
+    return li;
+  }
+  function card(r) {
+    const cl = r.clusters, k = vsel.has(r.id) ? vsel.get(r.id) : cl.length - 1, latest = k === cl.length - 1 || !cl.length;
+    const {from, to} = windowOf(r, k), dg = latest ? latestDiag(r) : null, seen = touched(r);
+    const using = sessionsUsing(r, from, to), usedIds = new Set(using.map(s => s.id));
+    const c = h("div", "card " + KIND_CLASS[r.kind] + (using.length ? "" : " idle")), left = h("div");
+    // Marks come only from the harness doctor (the triage, or Diagnose where it ran): one tile per session, newest first.
+    const marks = [], judged = new Set();
+    let nBad = 0;
+    // Judged = the doctor has looked at the session (a file it wasn't involved in simply has no verdict).
+    for (const s of using) if ((D.triage || {})[s.id] || (dg && dg.sessions.includes(s.id))) judged.add(s.id);
+    for (const [sid, vd] of verdicts(r, k)) {
+      const s = D.byId.get(sid);
+      if (!s || !usedIds.has(sid)) continue;
+      judged.add(sid);
+      const v = verdictOf(r, vd);
+      if (v === "worked") {
+        marks.push([s.ms, () => tile("ok", "✓", {head: "good use", ok: true, ms: s.ms, line: vd.line, you: vd.you})]);
+      } else if (v === "failed") {
+        nBad++;
+        const items = issuesOf(vd).map(i => ({head: FR[i.type] || String(i.type || "issue").replace(/_/g, " "), line: i.line, you: i.you, marks: i.you_marks}));
+        marks.push([s.ms, () => tile("x", "✕", Object.assign({ms: s.ms, items}, items.length > 1 ? {head: items.length + " issues"} : items[0]), items.length)]);
+      }
+    }
+    const waiting = using.filter(s => !judged.has(s.id)).length;
+    left.append(h("div", "nm", r.name), h("div", "sub", r.kind + " · " + plural(using.length, "session", "sessions") + (waiting ? " · " + waiting + " not judged" : "")));
+    const o = h("div", "xs");
+    for (const [, make] of marks.sort((a, b) => b[0] - a[0])) o.append(make());
+    c.append(left, o, versionSquare(r, k));
+    c.addEventListener("click", e => {
+      if (e.target.closest(".more,.vdiff")) return;
+      open.has(r.id) ? open.delete(r.id) : open.add(r.id); renderCards(false);
+    });
+    if (open.has(r.id) && !latest) {  // an older version: its marks only, no diagnosis
+      const more = h("div", "more");
+      more.append(h("div", "meta", "This is v" + (k + 1) + ". Scroll the version square up to get back to the latest one."));
+      c.append(more);
+    }
+    if (open.has(r.id) && latest) {
+      const more = h("div", "more"), sec = h("div"), head = h("div", "fhead");
+      // "Run harness doctor" diagnoses every file with a new bad use: why it fails and the exact edit.
+      // With a diagnosis, its suggested edits are the whole answer (each one says why in its first line).
+      const edits = dg ? (dg.try || []) : [];
+      if (!edits.length) {
+        const title = dg ? (nBad ? "No edits suggested" : "Doing fine") : nBad ? "Not diagnosed yet" : judged.size ? "No bad uses since this version 🎉"
+          : using.length ? "Not judged yet" : "Not used since this version";
+        head.append(h("h3", null, title));
+        sec.append(head);
+      }
+      if (!dg && using.length && !judged.size) sec.append(h("div", "meta", "A session gets judged once it's been quiet for 30 minutes."));
+      const fresh = dg && !seen.some(s => !dg.sessions.includes(s.id));
+      if (nBad && !fresh) sec.append(h("div", "meta", dg ? "New sessions since this diagnosis: press Run harness doctor to update it." : "Press Run harness doctor to diagnose it."));
+      if (edits.length) {
+        const ul = h("ul", "try");
+        if (sec.childElementCount) ul.style.marginTop = "10px";
+        edits.forEach((t, i) => ul.append(tryItem(t, r, i, true)));
+        sec.append(ul);
+      }
+      const lc = latestOf(r);
+      if (lc && lc.applied) {  // this version came from Apply: what went in, and the way back
+        const ul = h("ul", "try"), th = h("h3", null, "Applied from Harness Doctor");
+        th.style.marginTop = "18px"; th.style.marginBottom = "8px";
+        lc.applied.items.forEach(t => ul.append(tryItem(t, r, -1, false)));
+        sec.append(th, ul);
+      }
+      more.append(sec);
+      c.append(more);
+    }
+    if (diffOpen.has(r.id)) c.append(versionPanel(r, k));
+    return c;
+  }
+  // Tiles that don't fit become "+X ✕ +Y ✓" (older ones go first).
+  function fitTiles() {
+    for (const box of document.querySelectorAll(".xs")) {
+      const old = box.querySelector(".xmore");
+      if (old) old.remove();
+      const tiles = [...box.querySelectorAll(".x,.ok")];
+      tiles.forEach(t => { t.hidden = false; });
+      if (!tiles.length) continue;
+      const step = tiles[0].offsetWidth + 10, room = box.clientWidth - 8 + 10;
+      if (tiles.length * step <= room) continue;
+      const keep = Math.max(0, Math.floor((room - 150) / step));
+      let nx = 0, nok = 0;
+      for (const t of tiles.slice(keep)) { t.hidden = true; t.classList.contains("ok") ? nok++ : nx++; }
+      const more = h("span", "xmore");
+      if (nx) more.append(h("span", "mx", "+" + nx + " ✕"));
+      if (nok) more.append(h("span", "mok", "+" + nok + " ✓"));
+      box.append(more);
+    }
+  }
+  // A redraw makes new cards under the mouse, which replays the hover lift and looks like a shake.
+  // Only opening or closing a card and changing versions may move; every other redraw keeps transitions off for a moment.
+  let thaw;
+  function renderCards(still = true) {
+    clearTimeout(thaw);
+    document.body.classList.toggle("still", still);
+    if (still) thaw = setTimeout(() => document.body.classList.remove("still"), 200);
+    const box = $("cards");
+    box.replaceChildren();
+    paintStatus();
+    const fails = r => counts(r, r.clusters.length - 1).x;
+    const groups = scope === "global" ? [[null, globalRows()]] : [["Project: " + (D.scopes.find(x => x.key === scope) || {label: scope}).label, projectRows()], ["Global", globalRows()]];
+    let hidden = 0;
+    for (const [title, all] of groups) {
+      const list = all.filter(r => {
+        const keep = showUnused || r.kind !== "skill" || sessionsUsing(r, since(r)).length > 0;
+        if (!keep) hidden++;
+        return keep;
+      }).sort((a, b) => ORDER[a.kind] - ORDER[b.kind] || (sessionsUsing(b, since(b)).length > 0) - (sessionsUsing(a, since(a)).length > 0) || fails(b) - fails(a) || a.name.localeCompare(b.name));
+      if (title) box.append(h("div", "group", title));
+      if (!list.length) box.append(h("div", "quiet", "Nothing here."));
+      for (const r of list) box.append(card(r));
+    }
+    if (hidden) box.append(h("div", "quiet", plural(hidden, "unused skill", "unused skills") + " hidden"));
+    fitTiles();
+    paintDock();
+  }
+
+  // ---------- page ----------
+  // Next to the button: out of date (what's waiting) or up to date (when it last checked). The job's own progress wins.
+  let jobRunning = false;
+  function paintStatus() {
+    if (jobRunning || !D) return;
+    const p = (D.pending || {})[scope] || {}, todo = [], m = $("msg");
+    if (p.judge) todo.push(plural(p.judge, "session", "sessions") + " to judge");
+    if (p.diagnose) todo.push(plural(p.diagnose, "file", "files") + " to diagnose");
+    m.replaceChildren();
+    if (!p.has_data) m.append(h("span", "stale", "No data yet"), " · press Run harness doctor");
+    else if (todo.length) m.append(h("span", "stale", "Out of date"), " · " + todo.join(", "));
+    else m.append("Up to date" + (D.last_judged ? " · last checked " + day(Date.parse(D.last_judged)) : ""));
+  }
+  function fillScopes() {
+    const sel = $("scope");
+    sel.replaceChildren();
+    for (const s of D.scopes) { const o = h("option", null, s.label); o.value = s.key; sel.append(o); }
+    if (!D.scopes.some(s => s.key === scope)) scope = "global";
+    sel.value = scope;
+  }
+  async function load(fresh) {
+    $("msg").textContent = "Reading your sessions…";
+    try { D = await (await fetch("/api/data" + (fresh ? "?fresh=1" : ""))).json(); }
+    catch (e) { $("msg").textContent = "Can't reach the server. Is Harness Doctor running? Run /harness-doctor:open."; return; }
+    for (const s of D.sessions) s.ms = Date.parse(s.t);
+    D.sessions.sort((a, b) => a.ms - b.ms);
+    D.byId = new Map(D.sessions.map(s => [s.id, s]));
+    fillScopes();
+    renderCards();
+  }
+  $("scope").addEventListener("change", e => {
+    scope = e.target.value; open.clear(); picks.clear(); edited.clear(); renderCards();
+    try { localStorage.setItem("scope", scope); } catch (err) {}  // the pick stays after a reload or restart
+  });
+  $("refresh").addEventListener("click", () => load(true));
+  const ub = $("unused");
+  const paintToggle = () => { ub.setAttribute("aria-pressed", String(showUnused)); ub.textContent = showUnused ? "Unused skills shown" : "Unused skills hidden"; };
+  paintToggle();
+  ub.addEventListener("click", () => {
+    showUnused = !showUnused; paintToggle();
+    try { localStorage.setItem("showUnused", showUnused ? "1" : "0"); } catch (e) {}
+    renderCards();
+  });
+  // "Run harness doctor": scores recent sessions with /insights if needed, then sorts the new ones (one cheap run).
+  // While it runs, the button shows a spinner, plus the percent once the sorting starts.
+  function busy(on, pct) {
+    const b = $("doctor");
+    b.disabled = on;
+    b.replaceChildren();
+    if (!on) { b.textContent = "Run harness doctor"; return; }
+    b.append(h("span", "spin"));
+    if (pct != null) b.append(pct + "%");
+    b.setAttribute("aria-label", "Harness doctor running" + (pct != null ? ", " + pct + "%" : ""));
+  }
+  async function poll() {
+    try {
+      const j = await (await fetch("/api/status")).json();
+      $("msg").textContent = j.message;
+      if (j.state === "running") { jobRunning = true; busy(true, j.pct); setTimeout(poll, 3000); return; }
+      jobRunning = false;
+      busy(false);
+      if (j.state === "done") await load(true);
+      else $("msg").textContent = j.message;  // an error stays visible
+    } catch (e) { setTimeout(poll, 5000); }
+  }
+  $("doctor").addEventListener("click", async () => {
+    busy(true, null);
+    try {
+      const res = await (await fetch("/api/doctor", {method: "POST", headers: {"X-Harness-Doctor": "1", "Content-Type": "application/json"}, body: JSON.stringify({scope})})).json();
+      if (!res.ok) $("msg").textContent = res.message;
+    } catch (e) { $("msg").textContent = "Can't reach the server."; busy(false); return; }
+    poll();
+  });
+  fetch("/api/status").then(r => r.json()).then(j => { if (j.state === "running") { busy(true, j.pct); poll(); } }).catch(() => {});
+  let rt;
+  addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(fitTiles, 120); });
+  load(false);
+})();
+</script>
+</body>
+</html>
