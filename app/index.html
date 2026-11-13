@@ -549,7 +549,7 @@ pre.tall{max-height:65vh}
     for (const [, make] of marks.sort((a, b) => b[0] - a[0])) o.append(make());
     c.append(left, o, versionSquare(r, k));
     c.addEventListener("click", e => {
-      if (e.target.closest(".more,.vdiff")) return;
+      if (e.target.closest(".more,.vdiff") || String(getSelection())) return;  // dragging to select text doesn't open or close
       open.has(r.id) ? open.delete(r.id) : open.add(r.id); renderCards(false);
     });
     if (open.has(r.id) && !latest) {  // an older version: its marks only, no diagnosis
