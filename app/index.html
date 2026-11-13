@@ -37,9 +37,10 @@ h1{font:700 42px/1.05 Fredoka,system-ui,sans-serif;margin:0;letter-spacing:-.01e
 .card.idle>:not(.more),.card.idle::before{opacity:.55}
 .nm{font:600 23px/1.2 Fredoka,system-ui,sans-serif;overflow-wrap:anywhere}
 .sub{color:var(--soft);font-size:14px;overflow-wrap:anywhere}
-.sub .path{cursor:copy;border-radius:6px}
-.sub .path:hover{color:var(--ink);text-decoration:underline dotted;text-underline-offset:3px}
-.sub .path.done{color:var(--green);font-weight:700;text-decoration:none}
+.sub .kp{position:relative;cursor:copy}
+.sub .kp .path{position:absolute;left:-8px;top:-4px;z-index:2;padding:3px 8px;border-radius:8px;background:var(--card);color:var(--ink);white-space:nowrap;box-shadow:0 4px 14px rgba(0,0,0,.25);opacity:0;pointer-events:none;transition:opacity .12s}
+.sub .kp:hover .path{opacity:1;pointer-events:auto}
+.sub .kp .path.done{color:var(--green);font-weight:700}
 .xs{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:nowrap;overflow:hidden;min-width:0;padding:4px;margin:-4px}
 .x,.ok{position:relative;flex:none;width:54px;height:54px;border-radius:18px;display:grid;place-items:center;font:700 26px/1 Fredoka,system-ui,sans-serif;cursor:default;transition:transform .1s ease}
 .x{background:var(--coral-bg);color:var(--coral)}
@@ -547,15 +548,16 @@ pre.tall{max-height:65vh}
     }
     const waiting = using.filter(s => !judged.has(s.id)).length;
     // The name as a file (coworker.md, spawn-tab.md), and under it the full path; the stripe shows the kind.
-    const sub = h("div", "sub"), pth = h("span", "path", r.path);
-    pth.title = "Click to copy";
-    pth.addEventListener("click", async e => {  // copies the path instead of opening the card
-      e.stopPropagation();
+    // The kind under the name; hovering it shows the full path over it, and a click copies the path.
+    const sub = h("div", "sub"), kp = h("span", "kp", r.kind), pth = h("span", "path", r.path);
+    kp.addEventListener("click", async e => {
+      e.stopPropagation();  // copies instead of opening the card
       try { await navigator.clipboard.writeText(r.path); pth.textContent = "Copied ✓"; pth.classList.add("done"); }
       catch (err) { pth.textContent = "Couldn't copy"; }
       setTimeout(() => { pth.textContent = r.path; pth.classList.remove("done"); }, 1200);
     });
-    sub.append(pth);
+    kp.append(pth);
+    sub.append(kp);
     if (waiting) sub.append(" · " + waiting + " not judged");
     left.append(h("div", "nm", /\.md$/i.test(r.name) ? r.name : r.name + ".md"), sub);
     const o = h("div", "xs");
