@@ -11,6 +11,7 @@ You write CLAUDE.md files, skills and an output style, then keep tweaking them. 
 - **Versions:** each card's square shows its version (one Claude Code session's batch of edits). Click it for the diff, scroll it to go back through versions and their marks.
 - **Run harness doctor:** judges the sessions it hasn't seen yet, then diagnoses each file with new bad uses and suggests edits, each with a line on why, shown as lines to cut and lines to add.
 - **Apply:** toggle the suggested edits you want, then press Apply in the card's corner to write them into the file. It shows up as a new version, so later sessions show whether it helped. Revert puts the old text back while the file is still as Apply left it.
+- **Right-click to ask Claude:** right-click the page, a card, a ✕ or a suggestion and pick Copy prompt. It copies a prompt to paste into Claude Code, naming the files and sessions so Claude can read the logs itself.
 - **Project picker:** look at one project's files and sessions, or Global.
 
 ## Install

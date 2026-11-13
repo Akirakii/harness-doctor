@@ -127,6 +127,43 @@ def shell_targets(cmd, cwd):
     return out
 
 
+HEREDOC = re.compile(r"""cat\s+(?:>\s*([^\s<>;&|]+)\s*<<(-?)\s*(['"]?)(\w+)\3|<<(-?)\s*(['"]?)(\w+)\6\s*>\s*([^\s<>;&|]+))[^\n]*\n""")
+
+
+def cwd_after(text, cwd):
+    """The folder after the cd commands in a piece of shell."""
+    for seg in re.split(r"&&|\|\||;|\n|\|", text):
+        toks = seg.strip().split()
+        if len(toks) > 1 and toks[0] == "cd":
+            cwd = resolve(toks[1], cwd)
+    return cwd
+
+
+def heredoc_writes(cmd, cwd):
+    """Row files written whole with cat > file <<'EOF' … EOF, with the text written: [(path, text)].
+    An unquoted EOF only counts when its text has nothing the shell would expand."""
+    out, pos, prefix = [], 0, ""
+    for m in HEREDOC.finditer(cmd):
+        if m.start() < pos:
+            continue  # inside an earlier heredoc's text
+        if m.group(1):
+            target, dash, quote, word = m.group(1), m.group(2), m.group(3), m.group(4)
+        else:
+            target, dash, quote, word = m.group(8), m.group(5), m.group(6), m.group(7)
+        end = re.compile(r"^" + (r"\t*" if dash else "") + re.escape(word) + r"[ \t]*$", re.M).search(cmd, m.end())
+        if not end:
+            continue
+        body = cmd[m.end():end.start()]
+        prefix += cmd[pos:m.start()]
+        pos = end.end()
+        if dash:
+            body = re.sub(r"^\t+", "", body, flags=re.M)
+        p = resolve(target, cwd_after(prefix, cwd))
+        if p and row_of(p) and (quote or not re.search(r"[$`\\]", body)):
+            out.append((p, body))
+    return out
+
+
 def user_text(content):
     if isinstance(content, str):
         return content
@@ -167,6 +204,8 @@ def parse_log(path):
             if isinstance(content, list):  # drop edits whose tool call failed
                 for b in content:
                     if isinstance(b, dict) and b.get("type") == "tool_result" and b.get("tool_use_id") in pending:
+                        for e in pending[b["tool_use_id"]]:
+                            e["done"] = d.get("timestamp")
                         res = b.get("content")
                         res = user_text(res) if not isinstance(res, str) else res
                         if b.get("is_error") or "<tool_use_error>" in (res or ""):
@@ -207,8 +246,13 @@ def parse_log(path):
                             made.append({"path": p, "t": t, "kind": "edit", "edits": [
                                 (e.get("old_string", ""), e.get("new_string", ""), bool(e.get("replace_all"))) for e in edits]})
                 elif name == "Bash":
-                    for p, seg, whole in shell_targets(str(inp.get("command", "")), cwd):
-                        made.append({"path": p, "t": t, "kind": "shell", "cmd": seg, "whole": whole})
+                    shell = str(inp.get("command", ""))
+                    written = dict(heredoc_writes(shell, cwd))  # cat > file <<'EOF': the whole new text is in the command
+                    for p, body in written.items():
+                        made.append({"path": p, "t": t, "kind": "rewrite", "content": body})
+                    for p, seg, whole in shell_targets(shell, cwd):
+                        if p not in written:
+                            made.append({"path": p, "t": t, "kind": "shell", "cmd": seg, "whole": whole})
                 for e in made:
                     e["session"] = sid
                 events += made
@@ -271,6 +315,22 @@ def udiff(a, b, cap=9000):
     return "\n".join(d.splitlines()[2:])[:cap]
 
 
+def outside_change(path, evs, cutoff):
+    """A change the logs don't show (a script run from the shell, an editor): the file was modified after the last
+    change in the logs finished. Only the latest one shows; sessions before it ran on an older text."""
+    try:
+        t = datetime.datetime.fromtimestamp(os.stat(path).st_mtime, datetime.timezone.utc)
+    except OSError:
+        return None
+    iso = t.strftime("%Y-%m-%dT%H:%M:%S.") + f"{t.microsecond // 1000:03d}Z"
+    if iso < cutoff:
+        return None
+    last = max((e.get("done") or e["t"] for e in evs), default=None)
+    if last and (t - datetime.datetime.fromisoformat(last.replace("Z", "+00:00"))).total_seconds() < 5:
+        return None  # that's the logged change itself
+    return {"path": path, "t": iso, "kind": "outside", "session": "outside:" + iso}
+
+
 def build_row(path, evs, snaps):
     """Versions of one file: what changed when, and its text after each change when it can be rebuilt."""
     scope, kind, name = row_of(path)
@@ -315,6 +375,8 @@ def build_row(path, evs, snaps):
             what = one_line(" … ".join(new for _, new, _ in e["edits"]))
         elif e["kind"] == "rewrite":
             what = e.get("what") or "Rewrote the whole file."
+        elif e["kind"] == "outside":
+            what = "Changed by a script or an editor, so what changed can't be shown."
         else:
             what = "Shell: " + e["cmd"]
         versions.append({"t": e["t"], "kind": e["kind"], "session": e["session"], "what": what, "diff": udiff(A[i - 1], A[i]), "text": A[i]})
@@ -409,7 +471,9 @@ def build():
     rows = []
     for p in sorted(paths):
         if os.path.isfile(p) and row_of(p):
-            row = build_row(p, [e for e in events[p] if e["t"] >= cutoff], snaps[p])
+            evs = [e for e in events[p] if e["t"] >= cutoff]
+            later = outside_change(p, evs, cutoff)
+            row = build_row(p, evs + ([later] if later else []), snaps[p])
             merge_unused(row, sessions)
             by_t = {"applied:" + x["t"]: x for x in applied.get(p, [])}
             for c in row["clusters"]:
@@ -841,9 +905,10 @@ def apply_suggestions(row_id, version_t, picks, texts=None):
             if nxt is None:
                 return {"ok": False, "message": f"Edit {i + 1} doesn't match the file any more, so nothing was applied."}
             text = nxt
+        mtime = os.stat(os.path.realpath(row_id)).st_mtime  # put back by a revert, so the file doesn't look changed
         write_file(row_id, text)
         recs = load_applied()
-        recs.setdefault(row_id, []).append({"t": now_iso(), "from": version_t, "before": before, "after": text,
+        recs.setdefault(row_id, []).append({"t": now_iso(), "from": version_t, "before": before, "after": text, "mtime_before": mtime,
                                             "picks": picks, "items": [items[i] for i in picks]})
         save_json(applied_file(), recs)
         CACHE["body"] = None
@@ -867,7 +932,9 @@ def revert_applied(row_id):
         if used:
             last["reverted"] = now_iso()  # sessions ran on it: both versions stay in the history
         else:
-            mine.pop()  # nothing ran on it: as if it never happened
+            mine.pop()  # nothing ran on it: as if it never happened, modified time included
+            if last.get("mtime_before"):
+                os.utime(os.path.realpath(row_id), (time.time(), last["mtime_before"]))
             if not mine:
                 recs.pop(row_id, None)
         save_json(applied_file(), recs)

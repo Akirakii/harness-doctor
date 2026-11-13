@@ -89,6 +89,10 @@ h1{font:700 42px/1.05 Fredoka,system-ui,sans-serif;margin:0;letter-spacing:-.01e
 .use{flex:none;font:700 14px Nunito,system-ui,sans-serif;color:var(--green);background:transparent;border:2px solid var(--green-bg);border-radius:999px;padding:5px 14px;cursor:pointer}
 .use:hover{border-color:var(--green)}
 .use[aria-pressed="true"]{background:var(--green);border-color:var(--green);color:var(--card)}
+.ctx{position:fixed;z-index:20;max-width:min(440px,calc(100vw - 16px));background:var(--card);border:2px solid var(--line);border-radius:14px;padding:6px;box-shadow:0 10px 30px rgba(0,0,0,.3)}
+.ctx button{display:block;width:100%;text-align:left;font:700 14px Nunito,system-ui,sans-serif;color:var(--ink);background:transparent;border:none;border-radius:10px;padding:8px 12px;cursor:pointer}
+.ctx button:hover,.ctx button:focus-visible{background:var(--bg);outline:none}
+.ctx .q{color:var(--soft);font:400 13px/1.45 Nunito,system-ui,sans-serif;margin-top:4px;white-space:pre-wrap;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:7;overflow:hidden}
 .dock{position:fixed;right:24px;bottom:24px;z-index:5;display:flex;gap:10px}
 .dock:empty{display:none}
 .still *,.still *::before,.still *::after{transition:none!important}
@@ -101,6 +105,23 @@ pre{margin:0;max-height:320px;overflow:auto;background:var(--bg);border-radius:1
 pre .a{color:#1F9D6B;display:block}pre .d{color:var(--coral);display:block}pre .h{color:var(--soft);display:block}
 pre.clamp{max-height:170px;overflow:hidden;-webkit-mask-image:linear-gradient(#000 55%,transparent);mask-image:linear-gradient(#000 55%,transparent)}
 pre.tall{max-height:65vh}
+.md{background:var(--bg);border-radius:14px;padding:12px 18px;font-size:15px;line-height:1.55;overflow-wrap:anywhere}
+.md.tall{max-height:65vh;overflow:auto}
+.md.clamp{max-height:170px;overflow:hidden;-webkit-mask-image:linear-gradient(#000 55%,transparent);mask-image:linear-gradient(#000 55%,transparent)}
+.md h2,.md h3,.md h4,.md h5,.md h6{font:600 17px/1.3 Fredoka,system-ui,sans-serif;margin:16px 0 6px}
+.md h2{font-size:21px}.md h3{font-size:18px}
+.md p{margin:6px 0}
+.md ul,.md ol{margin:6px 0;padding-left:22px}
+.md li{margin:3px 0}
+.md code{font:13px ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--card);border-radius:6px;padding:1px 5px}
+.md pre{background:var(--card);margin:8px 0;max-height:none}
+.md table{border-collapse:collapse;margin:8px 0;font-size:14px}
+.md th,.md td{border:1px solid var(--line);padding:5px 9px;text-align:left;vertical-align:top}
+.md blockquote{margin:8px 0;padding-left:12px;border-left:3px solid var(--line);color:var(--soft)}
+.md hr{border:none;border-top:2px dashed var(--line);margin:12px 0}
+.md a{color:var(--blue)}
+.md .fm{font-size:13px;color:var(--soft);border-bottom:2px dashed var(--line);padding-bottom:8px;margin-bottom:6px}
+.md .fm b{color:var(--ink)}
 .quiet{color:var(--soft);font-size:15px;margin:6px 4px}
 #msg .stale{color:var(--coral);font-weight:700}
 @media (max-width:600px){.dock{right:16px;bottom:16px}h1{font-size:34px}.card{grid-template-columns:1fr auto}.xs{grid-column:1/-1;grid-row:2;justify-content:flex-start}.vsq{width:44px;height:44px}.x,.ok{width:44px;height:44px;font-size:22px}.xmore{height:44px}}
@@ -119,6 +140,7 @@ pre.tall{max-height:65vh}
   <section class="cards" id="cards"></section>
 </main>
 <div id="dock" class="dock"></div>
+<div id="ctx" class="ctx" role="menu" hidden></div>
 <div id="tip" hidden></div>
 <script>
 (function () {
@@ -237,6 +259,92 @@ pre.tall{max-height:65vh}
     return x;
   }
 
+  // ---------- whole files, rendered as Markdown ----------
+  // A small renderer for what harness files use: front matter, headings, lists, tables, quotes, code, bold, italic,
+  // links. Everything is escaped first, so a file can't inject HTML; links only open http(s).
+  const esc = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  function inline(s) {
+    const codes = [];
+    s = esc(s).replace(/`([^`]+)`/g, (m, c) => { codes.push(c); return "\u0000" + (codes.length - 1) + "\u0000"; });
+    s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+      .replace(/(^|[^*\w])\*([^*\s][^*]*?)\*(?!\w)/g, "$1<em>$2</em>")
+      .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+    return s.replace(/\u0000(\d+)\u0000/g, (m, k) => "<code>" + codes[k] + "</code>");
+  }
+  function listHtml(items) {
+    let html = "";
+    const stack = [];
+    for (const it of items) {
+      while (stack.length > 1 && it.ind < stack[stack.length - 1].ind) html += "</li></" + stack.pop().tag + ">";
+      const top = stack[stack.length - 1];
+      if (!top || it.ind > top.ind) { const tag = it.ol ? "ol" : "ul"; stack.push({ind: it.ind, tag}); html += "<" + tag + "><li>"; }
+      else html += "</li><li>";
+      html += inline(it.text);
+    }
+    while (stack.length) html += "</li></" + stack.pop().tag + ">";
+    return html;
+  }
+  const LIST = /^(\s*)([-*]|\d+\.)\s+(.*)$/, TABLE = /^\s*\|.*\|\s*$/, BLOCK = /^(#{1,6}\s|```|>|\s*([-*]|\d+\.)\s|-{3,}\s*$)/;
+  function mdHtml(text) {
+    const lines = text.replace(/\r/g, "").split("\n"), out = [];
+    let i = 0;
+    if (lines[0] === "---") {  // front matter: name, description, ...
+      const end = lines.indexOf("---", 1);
+      if (end > 0) {
+        out.push('<div class="fm">' + lines.slice(1, end).map(l => {
+          const m = l.match(/^([\w-]+):\s*(.*)$/);
+          return "<div>" + (m ? "<b>" + esc(m[1]) + "</b> " + inline(m[2]) : inline(l)) + "</div>";
+        }).join("") + "</div>");
+        i = end + 1;
+      }
+    }
+    while (i < lines.length) {
+      const l = lines[i];
+      let m;
+      if (!l.trim()) { i++; continue; }
+      if (/^```/.test(l)) {
+        const buf = [];
+        for (i++; i < lines.length && !/^```/.test(lines[i]); i++) buf.push(lines[i]);
+        i++;
+        out.push("<pre>" + esc(buf.join("\n")) + "</pre>");
+      } else if ((m = l.match(/^(#{1,6})\s+(.*)$/))) {
+        const n = Math.min(m[1].length + 1, 6);
+        out.push("<h" + n + ">" + inline(m[2]) + "</h" + n + ">");
+        i++;
+      } else if (/^-{3,}\s*$/.test(l)) {
+        out.push("<hr>");
+        i++;
+      } else if (TABLE.test(l) && /^\s*\|[\s:|-]+\|\s*$/.test(lines[i + 1] || "")) {
+        const cells = s => s.trim().replace(/^\||\|$/g, "").split("|").map(c => c.trim());
+        let html = "<table><thead><tr>" + cells(l).map(c => "<th>" + inline(c) + "</th>").join("") + "</tr></thead><tbody>";
+        for (i += 2; i < lines.length && TABLE.test(lines[i]); i++) html += "<tr>" + cells(lines[i]).map(c => "<td>" + inline(c) + "</td>").join("") + "</tr>";
+        out.push(html + "</tbody></table>");
+      } else if (/^>\s?/.test(l)) {
+        const buf = [];
+        for (; i < lines.length && /^>\s?/.test(lines[i]); i++) buf.push(lines[i].replace(/^>\s?/, ""));
+        out.push("<blockquote>" + inline(buf.join(" ")) + "</blockquote>");
+      } else if (LIST.test(l)) {
+        const items = [];
+        for (; i < lines.length && lines[i].trim() && (LIST.test(lines[i]) || /^\s+\S/.test(lines[i])); i++) {
+          const lm = lines[i].match(LIST);
+          if (lm) items.push({ind: lm[1].length, ol: /\d/.test(lm[2]), text: lm[3]});
+          else items[items.length - 1].text += " " + lines[i].trim();  // a wrapped line of the item above
+        }
+        out.push(listHtml(items));
+      } else {
+        const buf = [l.trim()];
+        for (i++; i < lines.length && lines[i].trim() && !BLOCK.test(lines[i]) && !TABLE.test(lines[i]); i++) buf.push(lines[i].trim());
+        out.push("<p>" + inline(buf.join(" ")) + "</p>");
+      }
+    }
+    return out.join("");
+  }
+  function mdBox(text, cls) {
+    const d = h("div", "md " + cls);
+    d.innerHTML = mdHtml(text);
+    return d;
+  }
+
   // ---------- one card ----------
   function diffPre(text) {
     const pre = h("pre");
@@ -262,7 +370,7 @@ pre.tall{max-height:65vh}
       head.append(h("h3", null, "No changes in the last 30 days"));
       if (text == null) { w.append(head); return w; }
       head.append(mini(grown.has(r.id) ? "Fold" : "Expand", () => flip(grown, r.id)));
-      w.append(head, h("pre", grown.has(r.id) ? "tall" : "clamp", text));
+      w.append(head, mdBox(text, grown.has(r.id) ? "tall" : "clamp"));
       return w;
     }
     const label = "v" + (k + 1) + " · " + day(Date.parse(c.end)) + " · " + plural(c.edits, "edit", "edits");
@@ -270,13 +378,13 @@ pre.tall{max-height:65vh}
       head.append(h("h3", null, label + " · new file"));
       if (text == null) { w.append(head, h("div", "meta", "Its text wasn't recorded.")); return w; }
       head.append(mini(grown.has(r.id) ? "Fold" : "Expand", () => flip(grown, r.id)));
-      w.append(head, h("pre", grown.has(r.id) ? "tall" : "clamp", text));
+      w.append(head, mdBox(text, grown.has(r.id) ? "tall" : "clamp"));
       return w;
     }
     const whole = showFile.has(r.id) && text != null;
     head.append(h("h3", null, label));
     if (text != null) head.append(mini(whole ? "Show changes" : "Show whole file", () => flip(showFile, r.id)));
-    w.append(head, whole ? h("pre", "tall", text) : c.diff ? diffPre(c.diff) : h("div", "meta", c.what || "No text recorded."));
+    w.append(head, whole ? mdBox(text, "tall") : c.diff ? diffPre(c.diff) : h("div", "meta", c.what || "No text recorded."));
     return w;
   }
   function versionSquare(r, k) {
@@ -352,6 +460,7 @@ pre.tall{max-height:65vh}
   function tryItem(t, r, i, pickable) {
     const li = h("li");
     if (typeof t === "string") { li.append(h("div", "tw", t)); return li; }
+    li.promptFn = () => suggestionPrompt(r, t, i);  // right-click: copy a prompt about this suggestion
     const top = h("div", "top");
     top.append(h("div", "tw", t.why || ""));
     li.append(top);
@@ -410,6 +519,7 @@ pre.tall{max-height:65vh}
     const {from, to} = windowOf(r, k), dg = latest ? latestDiag(r) : null, seen = touched(r);
     const using = sessionsUsing(r, from, to), usedIds = new Set(using.map(s => s.id));
     const c = h("div", "card " + KIND_CLASS[r.kind] + (using.length ? "" : " idle")), left = h("div");
+    c.promptFn = () => cardPrompt(r, k);  // right-click: copy a prompt about this card
     // Marks come only from the harness doctor (the triage, or Diagnose where it ran): one tile per session, newest first.
     const marks = [], judged = new Set();
     let nBad = 0;
@@ -425,7 +535,11 @@ pre.tall{max-height:65vh}
       } else if (v === "failed") {
         nBad++;
         const items = issuesOf(vd).map(i => ({head: FR[i.type] || String(i.type || "issue").replace(/_/g, " "), line: i.line, you: i.you, marks: i.you_marks}));
-        marks.push([s.ms, () => tile("x", "✕", Object.assign({ms: s.ms, items}, items.length > 1 ? {head: items.length + " issues"} : items[0]), items.length)]);
+        marks.push([s.ms, () => {
+          const x = tile("x", "✕", Object.assign({ms: s.ms, items}, items.length > 1 ? {head: items.length + " issues"} : items[0]), items.length);
+          x.promptFn = () => issuePrompt(r, sid, items);  // right-click: copy a prompt about this issue
+          return x;
+        }]);
       }
     }
     const waiting = using.filter(s => !judged.has(s.id)).length;
@@ -521,6 +635,85 @@ pre.tall{max-height:65vh}
     fitTiles();
     paintDock();
   }
+
+  // ---------- right-click: copy a prompt to ask Claude about what's under the mouse ----------
+  const LOGS = "Session logs are in ~/.claude/projects/*/<session id>.jsonl.";
+  const when = ms => new Date(ms).toLocaleDateString(undefined, {month: "short", day: "numeric", year: "numeric"});
+  const ids = list => list.length ? list.join(", ") : "none";
+  // Session ids of version k's good and bad uses, in view.
+  function uses(r, k = r.clusters.length - 1) {
+    const {from, to} = windowOf(r, k), good = [], bad = [];
+    for (const [sid, vd] of verdicts(r, k)) {
+      const s = D.byId.get(sid), v = verdictOf(r, vd);
+      if (!s || !inScope(s) || s.ms < from || s.ms >= to) continue;
+      if (v === "worked") good.push(sid); else if (v === "failed") bad.push(sid);
+    }
+    return {good, bad};
+  }
+  const versionOf = (r, k) => r.clusters.length ? "v" + (k + 1) + " of " + r.clusters.length + ", in force since " + when(Date.parse(r.clusters[k].end)) : "unchanged in the last 30 days";
+  function pagePrompt() {
+    const rows = scope === "global" ? globalRows() : projectRows().concat(globalRows());
+    const where = scope === "global" ? "all my projects" : (D.scopes.find(x => x.key === scope) || {label: scope}).label;
+    const lines = [], bad = rows.map(r => [r, uses(r)]).filter(([, u]) => u.bad.length);
+    for (const [r, u] of bad) lines.push("- " + r.path + " (" + r.kind + "): " + u.bad.length + " bad, " + u.good.length + " good. Bad uses: " + ids(u.bad));
+    if (!lines.length) return "Use the /harness-doctor:diagnose skill. None of my harness files has a bad use in " + where + " since its latest version. Check " +
+      rows.map(r => r.path).join(", ") + " and say whether any of them still needs a change. Don't apply anything.";
+    return ["Use the /harness-doctor:diagnose skill. These harness files have bad uses in " + where + " since their latest version:", ...lines, LOGS,
+      "Read the bad sessions, find what keeps going wrong across the files, and propose one set of edits that fixes them all. Don't apply them."].join("\n");
+  }
+  function cardPrompt(r, k) {
+    const u = uses(r, k);
+    return ["Use the /harness-doctor:diagnose skill on " + r.path + " (" + r.kind + ", " + versionOf(r, k) + ").",
+      "Good uses: " + ids(u.good) + ".", "Bad uses: " + ids(u.bad) + ".", LOGS,
+      u.bad.length ? "Say why it fails and what to change. Don't apply anything." : "Say whether it's doing its job and whether anything should change. Don't apply anything."].join("\n");
+  }
+  function issuePrompt(r, sid, items) {
+    const s = D.byId.get(sid), out = ["In session " + sid + " (" + when(s.ms) + ", in " + s.cwd + "), " + r.path + " had " + (items.length > 1 ? "these issues:" : "this issue:")];
+    for (const it of items) {
+      out.push("- " + it.head + (it.line ? ": " + it.line : ""));
+      if (it.you) out.push('  I said: "' + it.you + '"');
+    }
+    out.push("Read that session's log (~/.claude/projects/*/" + sid + ".jsonl) around that moment, then tell me what happened and which line of " + r.path + " caused it.");
+    return out.join("\n");
+  }
+  function suggestionPrompt(r, t, i) {
+    const mine = (edited.get(r.id) || new Map()).get(i), text = mine != null ? mine : t.text, u = uses(r), out = ["Harness doctor suggests this edit to " + r.path + ":"];
+    if (t.why) out.push("Why: " + t.why);
+    if (t.find && text) out.push("Replace:", t.find, "With:", text);
+    else if (t.find) out.push("Cut:", t.find);
+    else if (text) { if (t.after) out.push("Add after this line:", t.after); out.push("Add:", text); }
+    out.push("Is it right, and what could it break? Check it against the file and the sessions that used it: " + ids(u.good.concat(u.bad)) + ".", LOGS, "Don't apply it.");
+    return out.join("\n");
+  }
+  const ctx = $("ctx");
+  let ctxTimer;  // closes the menu shortly after "Copied"; a new right-click cancels it
+  function hideCtx() { clearTimeout(ctxTimer); ctx.hidden = true; }
+  document.addEventListener("contextmenu", e => {
+    if (!D || e.target.closest("#ctx,select,.edit") || String(getSelection())) return;  // keep the browser's menu for editing and selected text
+    let make = pagePrompt;
+    for (let n = e.target; n; n = n.parentElement) if (n.promptFn) { make = n.promptFn; break; }
+    e.preventDefault();
+    clearTimeout(ctxTimer);
+    tip.hidden = true;
+    const text = make(), b = h("button", null, "Copy prompt:");
+    b.type = "button";
+    b.setAttribute("role", "menuitem");
+    b.append(h("span", "q", '"' + text + '"'));  // the start of the prompt, a few lines, cut off with …
+    b.addEventListener("click", async () => {
+      try { await navigator.clipboard.writeText(text); b.textContent = "Copied ✓"; } catch (err) { b.textContent = "Couldn't copy"; }
+      ctxTimer = setTimeout(hideCtx, 600);
+    });
+    ctx.replaceChildren(b);
+    ctx.hidden = false;
+    const w = ctx.offsetWidth, ht = ctx.offsetHeight;
+    ctx.style.left = Math.max(8, Math.min(e.clientX, innerWidth - w - 8)) + "px";
+    ctx.style.top = Math.max(8, Math.min(e.clientY, innerHeight - ht - 8)) + "px";
+    b.focus();
+  });
+  document.addEventListener("click", e => { if (!e.target.closest("#ctx")) hideCtx(); });
+  document.addEventListener("keydown", e => { if (e.key === "Escape") hideCtx(); });
+  addEventListener("scroll", hideCtx, {passive: true});
+  addEventListener("blur", hideCtx);
 
   // ---------- page ----------
   // Next to the button: out of date (what's waiting) or up to date (when it last checked). The job's own progress wins.

@@ -111,5 +111,35 @@ class ApplyEdits(unittest.TestCase):
             self.assertEqual(os.stat(f).st_mode & 0o777, 0o640)
 
 
+class OutsideChange(unittest.TestCase):
+    def test_a_change_after_the_logs_is_a_version(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".md") as f:
+            ev = hd.outside_change(f.name, [], "2000-01-01")
+            self.assertEqual(ev["kind"], "outside")
+            self.assertTrue(ev["t"].endswith("Z"))
+
+    def test_the_logged_change_itself_is_not(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".md") as f:
+            done = hd.now_iso()
+            self.assertIsNone(hd.outside_change(f.name, [{"t": done, "done": done}], "2000-01-01"))
+
+    def test_older_than_the_window_is_ignored(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".md") as f:
+            self.assertIsNone(hd.outside_change(f.name, [], "9999"))
+
+
+class Heredocs(unittest.TestCase):
+    def test_quoted_heredoc_after_cd(self):
+        cmd = "cd ~/.claude/skills && cat > x/SKILL.md <<'EOF'\n---\nname: x\n$NOT_EXPANDED\nEOF\necho done"
+        self.assertEqual(hd.heredoc_writes(cmd, None), [(hd.CLAUDE + "/skills/x/SKILL.md", "---\nname: x\n$NOT_EXPANDED\n")])
+
+    def test_two_heredocs_in_one_command(self):
+        cmd = "cat > ~/.claude/CLAUDE.md <<'A'\none\nA\ncat <<'B' > ~/.claude/skills/y/SKILL.md\ntwo\nB\n"
+        self.assertEqual([t for _, t in hd.heredoc_writes(cmd, None)], ["one\n", "two\n"])
+
+    def test_unquoted_heredoc_with_expansion_is_skipped(self):
+        self.assertEqual(hd.heredoc_writes("cat > ~/.claude/CLAUDE.md <<EOF\n$HOME\nEOF\n", None), [])
+
+
 if __name__ == "__main__":
     unittest.main()
