@@ -1,7 +1,7 @@
 {
   "name": "harness-doctor",
   "displayName": "Harness Doctor",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "See which of your CLAUDE.md files, skills and output styles help and which cause trouble, judged from your own sessions, with the exact edit to fix what fails.",
   "author": {
     "name": "Akirakii",

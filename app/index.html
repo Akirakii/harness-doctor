@@ -8,9 +8,9 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#FFF7EC;--card:#FFFFFF;--ink:#2B2A33;--soft:#8C8897;--line:#F0E5D4;--coral:#F2545B;--coral-bg:#FFE2DF;--blue:#3B82E0;--blue-bg:#DCEAFF;--green:#1F9D6B;--green-bg:#DDF5EA;--purple:#8B5CF6;--yellow:#E8A800}
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#16141D;--card:#211E2B;--ink:#F5F2FA;--soft:#A6A1B5;--line:#302C3D;--coral:#FF6B70;--coral-bg:#3A2030;--blue:#5DA5F2;--blue-bg:#1D2C45;--green:#3DD39A;--green-bg:#173A2D;--purple:#A78BFA;--yellow:#F5C542}}
-:root[data-theme="dark"]{--bg:#16141D;--card:#211E2B;--ink:#F5F2FA;--soft:#A6A1B5;--line:#302C3D;--coral:#FF6B70;--coral-bg:#3A2030;--blue:#5DA5F2;--blue-bg:#1D2C45;--green:#3DD39A;--green-bg:#173A2D;--purple:#A78BFA;--yellow:#F5C542}
+:root{--bg:#FFF7EC;--card:#FFFFFF;--ink:#2B2A33;--soft:#8C8897;--line:#F0E5D4;--coral:#F2545B;--coral-bg:#FFE2DF;--blue:#3B82E0;--blue-bg:#DCEAFF;--green:#1F9D6B;--green-bg:#DDF5EA;--purple:#8B5CF6;--yellow:#E8A800;--orange:#E2741F;--orange-bg:#FFE8D4}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#16141D;--card:#211E2B;--ink:#F5F2FA;--soft:#A6A1B5;--line:#302C3D;--coral:#FF6B70;--coral-bg:#3A2030;--blue:#5DA5F2;--blue-bg:#1D2C45;--green:#3DD39A;--green-bg:#173A2D;--purple:#A78BFA;--yellow:#F5C542;--orange:#FF9A4D;--orange-bg:#3A2A1C}}
+:root[data-theme="dark"]{--bg:#16141D;--card:#211E2B;--ink:#F5F2FA;--soft:#A6A1B5;--line:#302C3D;--coral:#FF6B70;--coral-bg:#3A2030;--blue:#5DA5F2;--blue-bg:#1D2C45;--green:#3DD39A;--green-bg:#173A2D;--purple:#A78BFA;--yellow:#F5C542;--orange:#FF9A4D;--orange-bg:#3A2A1C}
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.45 Nunito,system-ui,sans-serif}
@@ -45,16 +45,18 @@ h1{font:700 42px/1.05 Fredoka,system-ui,sans-serif;margin:0;letter-spacing:-.01e
 .xs::-webkit-scrollbar{display:none}
 .xs>:first-child{margin-left:auto}
 .xs.scrolls{cursor:grab}.xs.dragging{cursor:grabbing}
-.x,.ok{position:relative;flex:none;width:40px;height:40px;border-radius:13px;display:grid;place-items:center;font:700 19px/1 Fredoka,system-ui,sans-serif;cursor:default;transition:transform .1s ease}
+.x,.ok,.miss{position:relative;flex:none;width:40px;height:40px;border-radius:13px;display:grid;place-items:center;font:700 19px/1 Fredoka,system-ui,sans-serif;cursor:default;transition:transform .1s ease}
 .x{background:var(--coral-bg);color:var(--coral)}
 .ok{background:var(--green-bg);color:var(--green)}
-.x:hover,.ok:hover{transform:scale(1.08)}
+.miss{background:var(--orange-bg);color:var(--orange)}
+.x:hover,.ok:hover,.miss:hover{transform:scale(1.08)}
 .vdiff{grid-column:1/-1;border-top:2px dashed var(--line);margin-top:10px;padding-top:12px;cursor:auto}
 .vdiff h3{font:600 16px Fredoka,system-ui,sans-serif;margin:0}
 #tip{position:fixed;z-index:10;max-width:440px;background:var(--card);color:var(--ink);border:2px solid var(--line);border-radius:16px;padding:10px 12px;box-shadow:0 10px 30px rgba(0,0,0,.25);font-size:14px;pointer-events:none}
 #tip .thead{display:flex;justify-content:space-between;align-items:baseline;gap:14px;margin-bottom:4px}
 #tip b{font:600 21px/1.2 Fredoka,system-ui,sans-serif;color:var(--coral)}
 #tip b.okc{color:var(--green)}
+#tip b.missc{color:var(--orange)}
 #tip .tdate{color:var(--soft);font-size:13px;white-space:nowrap}
 #tip .say{margin-top:8px;padding:8px 10px;border-radius:12px;background:var(--bg);font-size:13px;line-height:1.4}
 #tip .who{display:block;font:600 12px Fredoka,system-ui,sans-serif;color:var(--soft);margin-bottom:2px}
@@ -70,10 +72,10 @@ h1{font:700 42px/1.05 Fredoka,system-ui,sans-serif;margin:0;letter-spacing:-.01e
 .pbox{background:var(--bg);border-radius:14px;padding:12px 14px;font:13px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;overflow-wrap:anywhere;max-height:300px;overflow:auto;cursor:text}
 .mini{font:700 13px Nunito,system-ui,sans-serif;color:var(--blue);background:var(--blue-bg);border:none;border-radius:999px;padding:5px 12px;cursor:pointer}
 .mini:disabled{opacity:.6;cursor:default}
-.ctx{position:fixed;z-index:20;max-width:min(440px,calc(100vw - 16px));background:var(--card);border:2px solid var(--line);border-radius:14px;padding:6px;box-shadow:0 10px 30px rgba(0,0,0,.3)}
+.ctx{position:fixed;z-index:20;max-width:min(640px,calc(100vw - 16px));background:var(--card);border:2px solid var(--line);border-radius:14px;padding:6px;box-shadow:0 10px 30px rgba(0,0,0,.3)}
 .ctx button{display:block;width:100%;text-align:left;font:700 14px Nunito,system-ui,sans-serif;color:var(--ink);background:transparent;border:none;border-radius:10px;padding:8px 12px;cursor:pointer}
 .ctx button:hover,.ctx button:focus-visible{background:var(--bg);outline:none}
-.ctx .q{color:var(--soft);font:400 13px/1.45 Nunito,system-ui,sans-serif;margin-top:4px;white-space:pre-wrap;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:7;overflow:hidden}
+.ctx .q{display:block;margin-top:6px;color:var(--ink);font-weight:400;max-height:min(320px,60vh);overscroll-behavior:contain;cursor:pointer}
 .still *,.still *::before,.still *::after{transition:none!important}
 pre{margin:0;max-height:320px;overflow:auto;background:var(--bg);border-radius:14px;padding:10px 12px;font:12.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;word-break:break-word}
 pre .a{color:#1F9D6B;display:block}pre .d{color:var(--coral);display:block}pre .h{color:var(--soft);display:block}
@@ -126,6 +128,15 @@ pre.tall{max-height:65vh}
 .tab:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
 .tab .cnt{font:700 13px Nunito,system-ui,sans-serif;background:var(--coral-bg);color:var(--coral);border-radius:999px;padding:2px 9px}
 #msg .stale{color:var(--coral);font-weight:700}
+#stale{background:var(--orange-bg);border-radius:14px;padding:14px 18px;margin:-8px 0 22px;display:grid;grid-template-columns:1fr auto;gap:4px 16px;align-items:center}
+#stale[hidden]{display:none}
+#stale b{color:var(--orange);font-size:16px}
+#stale .why{color:var(--soft);font-size:14px;grid-column:1}
+#stale .again{grid-column:2;grid-row:1/3;font:700 15px Nunito,system-ui,sans-serif;color:var(--orange);background:var(--card);border:2px solid var(--orange);border-radius:999px;padding:7px 16px;cursor:pointer}
+#stale .again:disabled{opacity:.6;cursor:default}
+#stale .mini{grid-column:1;justify-self:start;margin-top:6px;color:var(--orange);background:var(--card)}
+#stale pre{grid-column:1/-1;margin-top:8px;background:var(--card)}
+@media (max-width:600px){#stale{grid-template-columns:1fr}#stale .again{grid-column:1;grid-row:auto;justify-self:start;margin-top:6px}}
 @media (max-width:600px){h1{font-size:34px}.card{grid-template-columns:1fr auto}.xs{grid-column:1/-1;grid-row:2;justify-content:flex-start}.xs>:first-child{margin-left:0}}
 </style>
 </head>
@@ -135,9 +146,11 @@ pre.tall{max-height:65vh}
   <div class="bar">
     <select class="pill" id="scope" aria-label="Project"></select>
     <button class="pill" id="refresh" type="button" aria-label="Refresh">↻</button>
-    <button class="pill go" id="doctor" type="button">Run harness doctor</button>
+    <button class="pill go" id="doctor" type="button">Judge new sessions</button>
+    <button class="pill" id="theme" type="button"></button>
     <span id="msg" role="status"></span>
   </div>
+  <div id="stale" hidden></div>
   <div class="tabrow" id="tabrow" hidden>
     <div class="tabs" id="tabs" role="tablist"></div>
     <button class="pill" id="unused" type="button" aria-pressed="true">Unused skills shown</button>
@@ -203,18 +216,20 @@ pre.tall{max-height:65vh}
     return [...out.values()];
   }
   const issuesOf = vd => (vd.issues || []).length ? vd.issues : [{type: "issue", line: vd.line}];
-  const verdictOf = (r, vd) => vd.verdict === "failed" ? "failed" : r.kind === "skill" || vd.verdict === "worked" ? "worked" : "none";
-  // Good (✓) and bad (✕) usages for version k.
+  // "missed": a skill that existed but didn't load when its job came up (the re-check found it).
+  const verdictOf = (r, vd) => vd.verdict === "failed" ? "failed" : vd.verdict === "missed" && r.kind === "skill" ? "missed" : r.kind === "skill" || vd.verdict === "worked" ? "worked" : "none";
+  // Good (✓), bad (✕) and missed (○) usages for version k.
   function counts(r, k) {
     const {from, to} = windowOf(r, k);
-    let x = 0, ok = 0;
+    let x = 0, ok = 0, miss = 0;
     for (const [sid, vd, use] of verdicts(r, k)) {
       const s = D.byId.get(sid), v = verdictOf(r, vd), ms = s && usageTime(r, s, use);
       if (!s || !inScope(s) || ms < from || ms >= to) continue;
       if (v === "worked") ok++;
-      if (v === "failed") x++;
+      if (v === "failed") x += issuesOf(vd).length;  // counted per issue, like the tiles
+      if (v === "missed") miss += issuesOf(vd).length;
     }
-    return {x, ok};
+    return {x, ok, miss};
   }
 
   // ---------- hover card ----------
@@ -236,7 +251,7 @@ pre.tall{max-height:65vh}
   }
   function showTip(e, spec) {
     const head = h("div", "thead");
-    head.append(h("b", spec.ok ? "okc" : null, spec.head), h("span", "tdate", day(spec.ms)));
+    head.append(h("b", spec.ok ? "okc" : spec.miss ? "missc" : null, spec.head), h("span", "tdate", day(spec.ms)));
     tip.replaceChildren(head);
     const say = (you, marks) => { const q = h("div", "say"); q.append(h("span", "who", "You"), marked(you, marks)); return q; };
     if (spec.items && spec.items.length > 1) {
@@ -416,36 +431,47 @@ pre.tall{max-height:65vh}
     b.addEventListener("keydown", e => { if (e.key === "ArrowDown") { e.preventDefault(); go(-1); } else if (e.key === "ArrowUp") { e.preventDefault(); go(1); } });
     return b;
   }
-  // Marks come only from the harness doctor (the triage, or Diagnose where it ran): one tile per session, newest first.
+  // Marks come only from the harness doctor (the triage, or Diagnose where it ran): one ✓ per good session and one ✕ or ○ per issue, newest first.
   function versionMarks(r, k) {
     const {from, to} = windowOf(r, k);
     const using = sessionsUsing(r, from, to), usedIds = new Set(using.map(s => s.id));
     const marks = [], bads = [], judged = new Set();
-    let nBad = 0, nOk = 0;
+    let nBad = 0, nOk = 0, nMiss = 0;
     // Judged = the doctor has looked at the session (a file it wasn't involved in simply has no verdict).
     for (const s of using) if ((D.triage || {})[s.id]) judged.add(s.id);
     for (const [sid, vd, use] of verdicts(r, k)) {
-      const s = D.byId.get(sid), ms = s && usageTime(r, s, use);
+      const s = D.byId.get(sid), ms = s && usageTime(r, s, use), v = verdictOf(r, vd);
+      if (v === "missed") {  // the skill never loaded in this session, so it isn't in `using`: the session's time decides the version
+        if (!s || !inScope(s) || ms < from || ms >= to) continue;
+        const items = issuesOf(vd).map(i => ({head: "didn't load", line: i.line, you: i.you, marks: i.you_marks}));
+        nMiss += items.length;
+        bads.push({sid, ms, items, missed: true});
+        for (const it of items) marks.push([ms, () => {  // one ○ per moment it should have loaded
+          const x = tile("miss", "○", Object.assign({ms, miss: true}, it));
+          x.promptFn = () => issuePrompt(r, sid, [it]);
+          return x;
+        }]);
+        continue;
+      }
       if (!s || !usedIds.has(sid) || ms < from || ms >= to) continue;  // a skill's load must fall in this version too
       judged.add(sid);
-      const v = verdictOf(r, vd);
       if (v === "worked") {
         nOk++;
         marks.push([ms, () => tile("ok", "✓", {head: "good use", ok: true, ms, line: vd.line, you: vd.you})]);
       } else if (v === "failed") {
-        nBad++;
         const items = issuesOf(vd).map(i => ({head: FR[i.type] || String(i.type || "issue").replace(/_/g, " "), line: i.line, you: i.you, marks: i.you_marks}));
+        nBad += items.length;
         bads.push({sid, ms, items});
-        marks.push([ms, () => {
-          const x = tile("x", "✕", Object.assign({ms, items}, items.length > 1 ? {head: items.length + " issues"} : items[0]));  // one ✕ per usage; hover lists its issues
-          x.promptFn = () => issuePrompt(r, sid, items);  // right-click: copy a prompt about this issue
+        for (const it of items) marks.push([ms, () => {  // one ✕ per issue, so a session with two issues shows two
+          const x = tile("x", "✕", Object.assign({ms}, it));
+          x.promptFn = () => issuePrompt(r, sid, [it]);  // right-click: copy a prompt about this issue
           return x;
         }]);
       }
     }
     marks.sort((a, b) => b[0] - a[0]);
     bads.sort((a, b) => b.ms - a.ms);
-    return {using, judged, nBad, nOk, marks, bads};
+    return {using, judged, nBad, nOk, nMiss, marks, bads};
   }
   // Every version's marks in one row, newest version first (left), each older one after a dotted line. The version
   // in the square (the latest unless another is picked) is highlighted, and scrolled into view when picked. An empty newest version says so when older ones
@@ -500,7 +526,7 @@ pre.tall{max-height:65vh}
       const more = h("div", "more"), sec = h("div"), vn = "v" + (cl.length ? k + 1 : 1);
       sec.append(promptBox(() => cardPrompt(r)));
       if (!latest) sec.append(h("div", "meta", "This is " + vn + ". Scroll the version square up to get back to the latest one."));
-      if (using.length && !judged.size) sec.append(h("div", "meta", "Not judged yet: press Run harness doctor."));
+      if (using.length && !judged.size) sec.append(h("div", "meta", "Not judged yet: press Judge new sessions."));
       more.append(sec);
       c.append(more);
     }
@@ -628,7 +654,7 @@ pre.tall{max-height:65vh}
     if (!((D.pending || {})[scope] || {}).has_data) {
       $("tabrow").hidden = true;
       const e = h("div", "empty", "No sessions judged yet. Press ");
-      e.append(h("b", null, "Run harness doctor"), " to judge them.");
+      e.append(h("b", null, "Judge new sessions"), " to judge them.");
       box.append(e);
       return;
     }
@@ -644,12 +670,12 @@ pre.tall{max-height:65vh}
       fitTiles();
       return;
     }
-    const fails = r => counts(r, r.clusters.length - 1).x;
+    const fails = r => { const c = counts(r, r.clusters.length - 1); return c.x + c.miss; };
     const groups = scope === "global" ? [[null, globalRows()]] : [["Project: " + (D.scopes.find(x => x.key === scope) || {label: scope}).label, projectRows()], ["Global", globalRows()]];
     let hidden = 0;
     for (const [title, all] of groups) {
       const list = all.filter(r => {
-        const keep = showUnused || r.kind !== "skill" || sessionsUsing(r, since(r)).length > 0;
+        const keep = showUnused || r.kind !== "skill" || sessionsUsing(r, since(r)).length > 0 || counts(r, r.clusters.length - 1).miss > 0;
         if (!keep) hidden++;
         return keep;
       }).sort((a, b) => ORDER[a.kind] - ORDER[b.kind] || (sessionsUsing(b, since(b)).length > 0) - (sessionsUsing(a, since(a)).length > 0) || fails(b) - fails(a) || a.name.localeCompare(b.name));
@@ -696,38 +722,51 @@ pre.tall{max-height:65vh}
     return {good: [...good], bad: [...bad]};
   }
   const versionOf = (r, k) => r.clusters.length ? "v" + (k + 1) + " of " + r.clusters.length + ", in force since " + when(Date.parse(r.clusters[k].end)) : "unchanged in the last 30 days";
+  // Every bad use in view of a file, newest version first, each tagged with its version; ones on the latest are still happening.
+  function badLines(r) {
+    const n = Math.max(1, r.clusters.length), vn = "v" + n, lines = [];
+    const since = r.clusters.length ? ", in force since " + when(Date.parse(r.clusters[n - 1].end)) : "";
+    for (let j = n - 1; j >= 0; j--) for (const b of versionMarks(r, j).bads) {
+      const said = b.items.find(it => it.you), what = b.items.map(it => it.line || it.head).join("; ");
+      lines.push("- v" + (j + 1) + ", " + when(b.ms) + ", session " + b.sid + ": " + (b.missed ? "didn't load when it should have: " : "") + what + (said ? ' (I said: "' + said.you + '")' : "") + (j === n - 1 ? " [still happening]" : ""));
+    }
+    return {vn, since, lines};
+  }
+  // The page's prompt is every card's prompt in one: each file with a bad use (any version) is checked as it is now
+  // against all its past bad uses, then one set of edits across the files. Files with no bad use and unused skills stay out.
   function pagePrompt() {
     const rows = scope === "global" ? globalRows() : projectRows().concat(globalRows());
     const where = scope === "global" ? "all my projects" : (D.scopes.find(x => x.key === scope) || {label: scope}).label;
-    const lines = [], bad = rows.map(r => [r, uses(r)]).filter(([, u]) => u.bad.length);
-    for (const [r, u] of bad) lines.push("- " + r.path + " (" + r.kind + "): " + u.bad.length + " bad, " + u.good.length + " good. Bad uses: " + ids(u.bad));
-    if (!lines.length) return "Use the /harness-doctor:diagnose skill. None of my harness files has a bad use in " + where + " since its latest version. Check " +
+    const out = [];
+    for (const r of rows) {
+      const {vn, since, lines} = badLines(r);
+      if (lines.length) out.push(r.path + " (" + r.kind + ", now " + vn + since + "):", ...lines);
+    }
+    if (!out.length) return "Use the /harness-doctor:diagnose skill. None of my harness files has a bad use in " + where + " in the last 30 days. Check " +
       rows.map(r => r.path).join(", ") + " and say whether any of them still needs a change. Don't apply anything.";
-    return ["Use the /harness-doctor:diagnose skill. These harness files have bad uses in " + where + " since their latest version:", ...lines, LOGS,
-      "Read the bad sessions, find what keeps going wrong across the files, and propose one set of edits that fixes them all. Don't apply them."].join("\n");
+    return ["Use the /harness-doctor:diagnose skill to check my harness files in " + where + " as they are now against their past bad uses, older versions included:", ...out, LOGS,
+      "For each bad use, quote the line in the file's current version that would have prevented it, or say none does. For a skill that didn't load, put what I said next to the words in its description, and fix the description, not the body.",
+      "Then find what keeps going wrong across the files, and propose one set of edits that fixes the ones still open. Don't apply them."].join("\n");
   }
   // A card's prompt checks the file as it is now against every bad use in view, older versions included: would the
   // latest version have prevented each one? Bad uses on the latest version itself are still happening.
   function cardPrompt(r) {
     if (r.kind === "skill" && !sessionsUsing(r, D.from).length) {  // an unused skill: why doesn't it load?
       const where = scope === "global" ? "any session" : "any session in " + (D.scopes.find(x => x.key === scope) || {label: scope}).label;
+      const missed = badLines(r).lines;
       return ["Use the /harness-doctor:diagnose skill on " + r.path + ". This skill hasn't loaded in " + where + " in the last 30 days.",
+        ...(missed.length ? ["The harness doctor found these moments where it should have loaded:", ...missed] : []),
         "Find out why: read its name and description, then look through my recent sessions (~/.claude/projects/*/*.jsonl) for moments where it should have loaded.",
         "Say whether it's needed at all. If it is, say why it didn't load (what I actually said, next to the words in its description) and how to change the description so it does. Don't apply anything."].join("\n");
     }
-    const n = Math.max(1, r.clusters.length), vn = "v" + n, lines = [];
-    const since = r.clusters.length ? ", in force since " + when(Date.parse(r.clusters[n - 1].end)) : "";
-    for (let j = n - 1; j >= 0; j--) for (const b of versionMarks(r, j).bads) {
-      const said = b.items.find(it => it.you), what = b.items.map(it => it.line || it.head).join("; ");
-      lines.push("- v" + (j + 1) + ", " + when(b.ms) + ", session " + b.sid + ": " + what + (said ? ' (I said: "' + said.you + '")' : "") + (j === n - 1 ? " [still happening]" : ""));
-    }
+    const {vn, since, lines} = badLines(r);
     if (!lines.length) {
       const u = uses(r);
       return ["Use the /harness-doctor:diagnose skill on " + r.path + " (" + r.kind + ", " + vn + since + "). It has no bad uses in the last 30 days.",
         "Good uses: " + ids(u.good) + ".", LOGS, "Say whether it's doing its job and whether anything should change. Don't apply anything."].join("\n");
     }
     return ["Use the /harness-doctor:diagnose skill to check " + r.path + " (" + r.kind + ") as it is now (" + vn + since + ") against its past bad uses:", ...lines, LOGS,
-      "For each one, quote the line in " + vn + " that would have prevented it, or say none does.",
+      "For each one, quote the line in " + vn + " that would have prevented it, or say none does. For one where it didn't load, put what I said next to the words in its description, and fix the description, not the body.",
       "Then suggest edits for the ones still open. Don't apply anything."].join("\n");
   }
   function issuePrompt(r, sid, items) {
@@ -776,7 +815,7 @@ pre.tall{max-height:65vh}
     const text = make(), b = h("button", null, "Copy prompt:");
     b.type = "button";
     b.setAttribute("role", "menuitem");
-    b.append(h("span", "q", '"' + text + '"'));  // the start of the prompt, a few lines, cut off with …
+    b.append(h("span", "pbox q", text));  // the whole prompt, scrollable inside the menu
     b.addEventListener("click", async () => {
       try { await navigator.clipboard.writeText(text); b.textContent = "Copied ✓"; } catch (err) { b.textContent = "Couldn't copy"; }
       ctxTimer = setTimeout(hideCtx, 600);
@@ -799,15 +838,38 @@ pre.tall{max-height:65vh}
   function paintStatus() {
     if (jobRunning || !D) return;
     const p = (D.pending || {})[scope] || {}, todo = [], m = $("msg");
-    if (p.judge) todo.push(plural(p.judge, "finished session", "finished sessions") + " to judge");
+    if (p.judge) todo.push(plural(p.judge, "new session", "new sessions") + " to judge");
     if (p.ongoing) todo.push(plural(p.ongoing, "ongoing session", "ongoing sessions") + " to judge");
     if (p.diagnose) todo.push(plural(p.diagnose, "file", "files") + " to diagnose");
     if (p.recheck) todo.push("problems to re-check against your files");
     if (p.problems) todo.push(plural(p.problems, "problem", "problems") + " to work out a fix for");
     m.replaceChildren();
-    if (!p.has_data) m.append(h("span", "stale", "No data yet"), " · press Run harness doctor");
+    if (!p.has_data) m.append(h("span", "stale", "No data yet"), " · press Judge new sessions");
     else if (todo.length) m.append(h("span", "stale", "Out of date"), " · " + todo.join(", "));
-    else m.append("Up to date" + (D.last_judged ? " · last checked " + day(Date.parse(D.last_judged)) : ""));
+    else m.append("No new sessions to judge" + (D.last_judged ? " · last checked " + day(Date.parse(D.last_judged)) : ""));
+    paintStale(p.stale || {}, p.has_data);
+  }
+  // The orange box: sessions judged with older rules keep their old marks. The main button never re-judges them,
+  // so this box says why they might be wrong, shows the rules diff to decide, and judges just them again.
+  let staleDiff = false;
+  function paintStale(st, hasData) {
+    const box = $("stale");
+    box.hidden = !(st.count && hasData);
+    if (box.hidden) return;
+    const n = st.count, b = h("button", "again", "Judge " + (n === 1 ? "it" : "these " + n) + " again");
+    b.type = "button";
+    b.disabled = jobRunning;
+    b.addEventListener("click", () => start(true));
+    box.replaceChildren(h("b", null, plural(n, "session was", "sessions were") + " judged with older rules"), b,
+      h("div", "why", "Judge new sessions skips them, so they keep marks from the old rules. " +
+        (st.diff ? "Read what changed to see if it's worth judging them again." : "They were judged before harness doctor kept its rules, so there's no diff to show.")));
+    if (st.diff) {
+      const t = h("button", "mini", staleDiff ? "Hide what changed" : "Show what changed in the rules");
+      t.type = "button";
+      t.addEventListener("click", () => { staleDiff = !staleDiff; paintStale(st, hasData); });
+      box.append(t);
+      if (staleDiff) box.append(diffPre(st.diff));
+    }
   }
   function fillScopes() {
     const sel = $("scope");
@@ -839,13 +901,14 @@ pre.tall{max-height:65vh}
     try { localStorage.setItem("showUnused", showUnused ? "1" : "0"); } catch (e) {}
     renderCards();
   });
-  // "Run harness doctor": scores recent sessions with /insights if needed, then sorts the new ones (one cheap run).
+  // "Judge new sessions": scores recent sessions with /insights if needed, then sorts the new ones (one cheap run).
   // While it runs, the button shows a spinner, plus the percent once the sorting starts.
   function busy(on, pct) {
-    const b = $("doctor");
+    const b = $("doctor"), again = document.querySelector("#stale .again");
     b.disabled = on;
+    if (again) again.disabled = on;
     b.replaceChildren();
-    if (!on) { b.textContent = "Run harness doctor"; return; }
+    if (!on) { b.textContent = "Judge new sessions"; b.removeAttribute("aria-label"); return; }
     b.append(h("span", "spin"));
     if (pct != null) b.append(pct + "%");
     b.setAttribute("aria-label", "Harness doctor running" + (pct != null ? ", " + pct + "%" : ""));
@@ -861,14 +924,32 @@ pre.tall{max-height:65vh}
       else $("msg").textContent = j.message;  // an error stays visible
     } catch (e) { setTimeout(poll, 5000); }
   }
-  $("doctor").addEventListener("click", async () => {
+  // again: judge the sessions judged with older rules instead of the new ones.
+  async function start(again) {
     busy(true, null);
     try {
-      const res = await (await fetch("/api/doctor", {method: "POST", headers: {"X-Harness-Doctor": "1", "Content-Type": "application/json"}, body: JSON.stringify({scope})})).json();
+      const res = await (await fetch("/api/doctor", {method: "POST", headers: {"X-Harness-Doctor": "1", "Content-Type": "application/json"}, body: JSON.stringify({scope, again})})).json();
       if (!res.ok) $("msg").textContent = res.message;
     } catch (e) { $("msg").textContent = "Can't reach the server."; busy(false); return; }
     poll();
+  }
+  $("doctor").addEventListener("click", () => start(false));
+  // Night and light mode: follows the system until picked, then remembers the pick.
+  function paintTheme() {
+    const dark = document.documentElement.dataset.theme ? document.documentElement.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+    $("theme").textContent = dark ? "☀" : "☾";
+    $("theme").setAttribute("aria-label", dark ? "Switch to light mode" : "Switch to night mode");
+    $("theme").title = dark ? "Light mode" : "Night mode";
+  }
+  try { const th = localStorage.getItem("theme"); if (th) document.documentElement.dataset.theme = th; } catch (e) {}
+  $("theme").addEventListener("click", () => {
+    const next = $("theme").textContent === "☀" ? "light" : "dark";
+    document.documentElement.dataset.theme = next;
+    try { localStorage.setItem("theme", next); } catch (e) {}
+    paintTheme();
   });
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", paintTheme);
+  paintTheme();
   fetch("/api/status").then(r => r.json()).then(j => { if (j.state === "running") { busy(true, j.pct); poll(); } }).catch(() => {});
   let rt;
   addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(fitTiles, 120); });

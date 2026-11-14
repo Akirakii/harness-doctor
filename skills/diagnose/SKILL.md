@@ -11,14 +11,17 @@ It never edits the file; the user decides.
 
 ## Input
 Gather it yourself: the file; the messages from `~/.claude/projects/*/<session_id>.jsonl`; and, where it exists, the /insights score in `~/.claude/usage-data/facets/<session_id>.json` (`friction_counts`, `friction_detail`, `brief_summary`, `outcome`).
-  Use only sessions that loaded the skill (or, for CLAUDE.md and the output style, any session after that version).
+  Use the sessions that loaded the skill (or, for CLAUDE.md and the output style, any session after that version).
+  For a skill, also search the other sessions since it existed for moments its job came up but it never loaded.
 
 ## Steps
 1. **Judge each session for this file:**
    - `worked`: the file was used and did its job (say what went right in one line, and quote in `you` the user's request it served, copied exactly, under 200 characters);
    - `failed`: the file caused or allowed at least one issue (a line in it was wrong, or a needed line was missing);
    - `not involved`: only for CLAUDE.md and output styles, which load in every session: the session never touched what the file covers (say where its issues belong in one line, e.g. "mouse lock: game launch rules in CLAUDE.md").
+   - `missed`: only for a skill: its job came up in the session but it never loaded (say what the user asked for in one line, and quote it in `you`).
    A skill only loads when it's used, so every session that loaded it is `worked` or `failed`, never `not involved`: a skill that loaded and caused no issue `worked`.
+   A missed load is the description's fault, not the body's: the fix goes in the description, using the words the user actually said.
    Each ✓ or ✕ is one usage: CLAUDE.md and an output style are used once per session, a skill once per load.
    A session that loaded the skill more than once has `uses` (the time of each load): give one verdict per load, each with `use` (1 for the first), judged from the messages after that load.
 2. **For a failed session, split its issues.** Only the issues this file caused; each gets its type and one plain line under 12 words.
@@ -30,8 +33,9 @@ Gather it yourself: the file; the messages from `~/.claude/projects/*/<session_i
    - `why`: two sentences on the pattern across the failed sessions, naming the part of the file at fault (or saying it isn't failing);
    - `try`: two or three edits to the file, each ready to apply: `why` (one sentence), `find` (exact text now in the file to replace or cut, or null to add), `text` (the new text, or null to cut) and `after` (for an add: the exact line it goes after); none if nothing needs changing.
      Copy `find` and `after` exactly from the file text, so the edit can be applied as is.
+     Write each edit as the general rule the failure breaks, with no project, genre or topic words from the sessions; a case can follow only as a short example.
 
-## Triage mode (the Harness Doctor page's "Run harness doctor" button)
+## Triage mode (the Harness Doctor page's "Judge new sessions" and "Judge them again" buttons)
 
 A cheap first pass over many sessions at once, from the user's own messages (no file text).
 Input: `files` (one per file version: id, name, kind, and `about`: its description, or else its headings and rule titles at that version, so a CLAUDE.md shows what it covered back then) and `sessions` (each with the ids of the `files` it touched, and `you`: the user's messages, each with its time and `after_claude`, the end of the Claude message it answered).
@@ -47,13 +51,13 @@ Give each gap a `topic`, a short snake_case name for the problem (e.g. `unverifi
 Answer with only this JSON: `{"sessions": [{"session": "<id>", "files": [{"file": "<id>", "use": 1 (only with `uses`), "verdict": "worked" | "failed", "line": "...", "you": "..." or null, "issues": [{"type": "<type>", "line": "...", "you": "..." or null, "you_marks": ["..."]}]}], "gaps": [{"topic": "<snake_case>", "type": "<type>", "line": "...", "you": "..." or null, "you_marks": ["..."]}]}]}`
 
 ## Re-check mode (right after triage, on the same button)
-Gaps were judged against the files that existed back then, so a file written or changed since may cover them now.
+Gaps were judged against the files each session loaded, so a file may cover them: one written or changed since, or a skill that existed but didn't load.
 Input: `files` (every file today: id, name, kind, `scope` (global or a project) and `about`) and `gaps` (each `topic` with its `moments`: date, project, one line).
-For each gap, name the one file whose job today is to prevent that problem, judged from its `about`.
+For each gap, name the one file whose job today is to prevent that problem, judged from its `about`; a skill whose job was the moment itself (the user asked for what it does) covers it too.
 A file covers a gap only when its `about` names that problem or the behaviour that prevents it; a file on a nearby subject doesn't.
 A project file covers only that project's moments.
 Leave a gap out when no file covers it.
 Answer with only this JSON: `{"covered": [{"topic": "<topic>", "file": "<id>"}]}`
 
 ## Output
-A short answer: how many sessions were good and bad uses, why in two lines, then the edits as a short list. Offer to apply them; don't apply them.
+A short answer: how many sessions were good uses, bad uses and missed loads, why in two lines, then the edits as a short list. Offer to apply them; don't apply them.

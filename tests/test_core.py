@@ -160,10 +160,35 @@ class SettleGaps(unittest.TestCase):
         self.assertEqual(hd.settle_gaps(t, self.d, {"overlong_replies": "/g/coworker.md"}), 1)
         self.assertEqual(t["sessions"]["old"], {"files": [], "gaps": []})
 
+    def test_skill_there_but_not_loaded_is_a_miss(self):
+        skill = {"id": "/g/skills/remember/SKILL.md", "scope": "global", "kind": "skill", "name": "remember", "created": "2026-11-12T15:00"}
+        self.d["rows"].append(skill)
+        t = {"sessions": {"new": {"files": [], "gaps": [self.gap()]}, "old": {"files": [], "gaps": [self.gap()]}}}
+        self.assertEqual(hd.settle_gaps(t, self.d, {"overlong_replies": skill["id"]}), 2)
+        f = t["sessions"]["new"]["files"][0]
+        self.assertEqual((f["file"], f["verdict"], len(f["issues"])), (skill["id"], "missed", 1))
+        self.assertEqual(t["sessions"]["old"], {"files": [], "gaps": []})  # the skill came later: deleted
+
     def test_other_projects_file_and_uncovered_gaps_stay(self):
         t = {"sessions": {"new": {"files": [], "gaps": [self.gap(), self.gap("other")]}}}
         self.assertEqual(hd.settle_gaps(t, self.d, {"overlong_replies": "/p/a/CLAUDE.md"}), 0)
         self.assertEqual(len(t["sessions"]["new"]["gaps"]), 2)
+
+
+class StaleResults(unittest.TestCase):
+    def test_rules_are_the_triage_and_recheck_parts(self):
+        text = hd.rules_text()
+        self.assertTrue(text.startswith("## Triage mode"))
+        self.assertIn("## Re-check mode", text)
+        self.assertNotIn("## Output", text)
+
+    def test_older_rules_are_stale_but_new_messages_come_first(self):
+        s = {"id": "s", "n": 5, "cwd": "/p", "t": "2026-11-10T10:00", "end": "2026-11-10T11:00", "skills": []}
+        t = {"sessions": {"s": {"v": 3, "rules": "old", "n": 5, "files": [], "gaps": []}}}
+        self.assertTrue(hd.stale(s, "global", t, "new"))
+        self.assertFalse(hd.stale(s, "global", t, "old"))
+        t["sessions"]["s"]["n"] = 3  # it grew: the main button judges it, so it isn't counted as stale
+        self.assertFalse(hd.stale(s, "global", t, "new"))
 
 
 class MergeUnmarked(unittest.TestCase):

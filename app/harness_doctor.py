@@ -536,6 +536,47 @@ def skill_body():
     return re.sub(r"^---.*?---\s*", "", read(SKILL) or "", flags=re.S)
 
 
+# ---------- the judging rules: a result judged with other rules is out of date ----------
+def rules_text():
+    """The triage and re-check parts of the skill, the only parts that change how a session is judged."""
+    m = re.search(r"^## Triage mode.*?(?=^## Output)", skill_body(), flags=re.S | re.M)
+    return (m.group(0) if m else skill_body()).strip()
+
+
+def rules_fp(text=None):
+    """A fingerprint of the judging rules. Each saved result keeps the one it was judged with."""
+    return hashlib.sha1((rules_text() if text is None else text).encode()).hexdigest()[:12]
+
+
+def save_rules():
+    """Keep the text of the rules in use, by fingerprint, so the page can show what changed since a result was judged."""
+    text = rules_text()
+    fp = rules_fp(text)
+    p = data_path(os.path.join("rules", fp + ".md"))
+    if not os.path.exists(p):
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        with open(p, "w") as fh:
+            fh.write(text)
+    return fp
+
+
+def stale(s, scope, t, fp):
+    """Session s was judged with other rules (or before rules were tracked), and has nothing new to judge."""
+    done = t["sessions"].get(s["id"])
+    return bool(done) and s["n"] >= 3 and in_scope(s, scope) and done.get("rules") != fp and to_judge(s, scope, t) is None
+
+
+def stale_info(d, scope, t):
+    """How many results are out of date, and the diff from the rules most of them were judged with to today's."""
+    fp = rules_fp()
+    old = [t["sessions"][s["id"]].get("rules") for s in d["sessions"] if stale(s, scope, t, fp)]
+    if not old:
+        return {"count": 0}
+    common = max(set(old), key=old.count)
+    before = read(data_path(os.path.join("rules", common + ".md"))) if common else None
+    return {"count": len(old), "diff": udiff(before, rules_text(), cap=20000) if before is not None else None}
+
+
 # ---------- triage: one cheap run that sorts every new session's issues onto the files ----------
 TRIAGE_V = 3  # bump to re-sort every session (2: verdicts quote the user's words; 3: a skill loaded twice gets a verdict per load)
 TRIAGE_OK = (2, 3)  # versions still read; a v2 session where a skill loaded twice gets judged again
@@ -638,7 +679,8 @@ def run_triage(d, todo):
     prompt = ("Act as the harness-doctor skill below, in triage mode: answer with the JSON only.\n\n" + skill_body() +
               "\n\n## The input\n" + json.dumps(doc, ensure_ascii=False))
     res = ask_claude(prompt, "Triage the sessions in the input, following the instructions in it.", "sonnet") or {}
-    out = {s["id"]: {"at": now_iso(), "v": TRIAGE_V, "n": s["n"], "files": [], "gaps": []} for s in todo}  # judged, even when nothing was found; n: your messages then
+    fp = save_rules()
+    out = {s["id"]: {"at": now_iso(), "v": TRIAGE_V, "rules": fp, "n": s["n"], "files": [], "gaps": []} for s in todo}  # judged, even when nothing was found; n: your messages then
     for x in res.get("sessions", []):
         if isinstance(x, dict) and x.get("session") in out:
             out[x["session"]]["files"] = [clean_use(dict(f, file=real[f["file"]])) for f in x.get("files", []) if isinstance(f, dict) and f.get("file") in files]
@@ -659,7 +701,7 @@ def recheck_key(t, d):
     """Changes when the open gaps or any file's versions change; the re-check only runs then."""
     gaps = sorted((sid, g["topic"]) for sid, v in t["sessions"].items() for g in v.get("gaps", []))
     files = sorted((r["id"], r["clusters"][-1]["end"] if r.get("clusters") else "") for r in d["rows"])
-    return hashlib.sha1(json.dumps([gaps, files]).encode()).hexdigest()[:16]
+    return hashlib.sha1(json.dumps([gaps, files, rules_fp()]).encode()).hexdigest()[:16]  # new rules: re-check once
 
 
 def recheck_gaps(d, t):
@@ -689,7 +731,8 @@ def recheck_gaps(d, t):
 def settle_gaps(t, d, covered):
     """covered: {topic: file id that covers it today}. For each session with that gap:
     the file was there and in use then → the gap becomes a ✕ on that file in that session (its version then lacked it);
-    the file came later, or a skill wasn't loaded → the gap is deleted;
+    a skill was there but didn't load → the gap becomes a "missed" mark on that skill (its description didn't trigger);
+    the file came later → the gap is deleted;
     the file belongs to another project → the gap stays."""
     rows, by_id, n = {r["id"]: r for r in d["rows"]}, {s["id"]: s for s in d["sessions"]}, 0
     for sid, v in t["sessions"].items():
@@ -701,9 +744,15 @@ def settle_gaps(t, d, covered):
                 keep.append(g)  # nothing covers it, or only another project's file does
                 continue
             n += 1
-            if fid not in touched_files(s, d["rows"]):
-                continue  # deleted: the fix came after this session
             issue = {"type": g.get("type") or "issue", "line": g["line"], "you": g.get("you"), "you_marks": g.get("you_marks", []), "gap": g["topic"]}
+            if fid not in touched_files(s, d["rows"]):
+                if row["kind"] == "skill" and not (row.get("created") and row["created"] > s["t"]):
+                    f = next((f for f in v["files"] if f.get("file") == fid and f.get("verdict") == "missed"), None)
+                    if f:
+                        f["issues"] = f.get("issues", []) + [issue]
+                    else:
+                        v["files"].append({"file": fid, "verdict": "missed", "line": g["line"], "you": g.get("you"), "issues": [issue]})
+                continue  # otherwise deleted: the fix came after this session
             f = next((f for f in v["files"] if f.get("file") == fid), None)
             if f:
                 if f.get("verdict") != "failed":
@@ -737,13 +786,14 @@ def rows_in(d, scope):
 
 
 def pending(d, scope="global"):
-    """What "Run harness doctor" would do now for a scope: finished and ongoing sessions to judge (for the first time, or
+    """What "Judge new sessions" would do now for a scope: finished and ongoing sessions to judge (for the first time, or
     again because they have new messages), and whether the problems need a re-check."""
     t, live = load_triage(), live_sessions()
     todo = [s for s in d["sessions"] if to_judge(s, scope, t)]
     ongoing = sum(1 for s in todo if s["id"] in live)
     recheck = any(v.get("gaps") for v in t["sessions"].values()) and t.get("recheck") != recheck_key(t, d)
-    return {"has_data": bool(t["sessions"]), "judge": len(todo) - ongoing, "ongoing": ongoing, "recheck": recheck}
+    return {"has_data": bool(t["sessions"]), "judge": len(todo) - ongoing, "ongoing": ongoing, "recheck": recheck,
+            "stale": stale_info(d, scope, t)}
 
 
 def live_sessions():
@@ -801,13 +851,15 @@ def loads_by_skill(s, more_than_once=False):
     return {k: sorted(v) for k, v in out.items() if len(v) > 1 or not more_than_once}
 
 
-def doctor_job(scope="global"):
-    """The page's button, for the chosen scope: judge every session it hasn't judged or that has new messages (one cheap run per 15,
-    from your messages, plus the /insights note where there is one), then re-check the problems no file covered."""
+def doctor_job(scope="global", again=False):
+    """The page's main button, for the chosen scope: judge every session it hasn't judged or that has new messages (one cheap run per 15,
+    from your messages, plus the /insights note where there is one), then re-check the problems no file covered.
+    again: the "Judge them again" button instead: judge the sessions judged with older rules."""
     try:
-        JOB.update(state="running", message="Finding new sessions…", pct=None)
+        JOB.update(state="running", message="Finding sessions to judge…", pct=None)
         d, t = json.loads(data_json(True)), load_triage()
-        todo = [s for s in d["sessions"] if needs_judging(s, d, scope, t)]
+        fp = rules_fp()
+        todo = [s for s in d["sessions"] if (stale(s, scope, t, fp) if again else needs_judging(s, d, scope, t))]
         for i in range(0, len(todo), 15):
             JOB.update(message=f"Judging sessions {i + 1}–{min(i + 15, len(todo))} of {len(todo)}…", pct=round(90 * i / len(todo)))
             for sid, v in run_triage(d, todo[i:i + 15]).items():
@@ -825,7 +877,7 @@ def doctor_job(scope="global"):
             print(f"Re-check didn't come back: {err}", file=sys.stderr)
         save_json(data_path("triage.json"), t)
         CACHE["body"] = None
-        msg = (f"Done: judged {len(todo)} new {'session' if len(todo) == 1 else 'sessions'}" +
+        msg = (f"Done: judged {len(todo)} {'old' if again else 'new'} {'session' if len(todo) == 1 else 'sessions'}" + (" again with today's rules" if again else "") +
                (f", and {settled} {'problem is' if settled == 1 else 'problems are'} now covered by a file." if settled else "."))
         JOB.update(state="done", pct=100, message=msg)
     except (OSError, subprocess.SubprocessError, ValueError, KeyError, TypeError) as err:
@@ -879,11 +931,12 @@ class Handler(BaseHTTPRequestHandler):
         if JOB["state"] == "running":
             return self.reply(200, b'{"ok":false,"message":"Already running."}', "application/json")
         try:
-            scope = str(json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}").get("scope") or "global")
-        except ValueError:
-            scope = "global"
+            body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
+            scope, again = str(body.get("scope") or "global"), body.get("again") is True
+        except (ValueError, AttributeError):
+            scope, again = "global", False
         JOB.update(state="running", message="Starting…", pct=None)
-        threading.Thread(target=doctor_job, args=(scope,), daemon=True).start()
+        threading.Thread(target=doctor_job, args=(scope, again), daemon=True).start()
         self.reply(200, b'{"ok":true}', "application/json")
 
 
@@ -965,7 +1018,7 @@ def main():
         return open_page(args)
     if args.background:
         with open(data_path("server.log"), "a") as log:
-            child = subprocess.Popen([sys.executable, os.path.abspath(__file__), "--port", str(PORT), "--no-open"],
+            child = subprocess.Popen([sys.executable, os.path.abspath(__file__), "--port", str(PORT), "--no-open"] + (["--dev"] if args.dev else []),
                                      stdout=log, stderr=log, stdin=subprocess.DEVNULL, start_new_session=True)
         with open(pid_file, "w") as fh:
             fh.write(str(child.pid))
