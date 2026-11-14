@@ -8,11 +8,12 @@ You write CLAUDE.md files, skills and an output style, then keep tweaking them. 
 
 - **One card per file:** your global and project CLAUDE.md files, each skill, and your output style, colored by kind.
 - **✓ and ✕ per session:** hover a mark to see what happened and your own words at that moment.
-- **Versions:** each card's square shows its version (one Claude Code session's batch of edits). Click it for the diff, scroll it to go back through versions and their marks.
-- **Run harness doctor:** judges the sessions it hasn't seen yet, then diagnoses each file with new bad uses and suggests edits, each with a line on why, shown as lines to cut and lines to add.
-- **Apply:** toggle the suggested edits you want, then press Apply in the card's corner to write them into the file. It shows up as a new version, so later sessions show whether it helped. Revert puts the old text back while the file is still as Apply left it.
-- **Right-click to ask Claude:** right-click the page, a card, a ✕ or a suggestion and pick Copy prompt. It copies a prompt to paste into Claude Code, naming the files and sessions so Claude can read the logs itself.
-- **Missing cards:** an issue that no file covers but keeps coming back (2 or more sessions) gets a dashed card for a file that doesn't exist yet. Right-click it to copy a prompt that asks Claude where the fix belongs: a new skill, a CLAUDE.md rule or a hook.
+- **Versions:** each card's row shows every version's marks, newest on the left, with a dotted line and a label before each older version, so you can see whether an edit helped. Old versions fold into counts like "v5 2 ✕ 1 ✓" when the row runs out of room. The square shows the version (one Claude Code session's batch of edits): click it for the diff, scroll it to pick an older version.
+- **Run harness doctor:** judges the sessions it hasn't seen yet, then re-checks the problems no file covered against your files.
+- **Open a card:** it shows a prompt to paste into Claude Code, with a Copy prompt button. The prompt checks the file as it is now against every bad use in view, older versions included: for each, which line would have prevented it, and edits for the ones still open. Hover the ✕ tiles for each moment. Fixing a file takes a conversation, so the page doesn't suggest edits: paste the prompt into Claude Code and work it out there. The edit then shows up as a new version, and later sessions show whether it helped.
+- **Right-click to ask Claude:** right-click the page, a card or a ✕ and pick Copy prompt. It copies a prompt to paste into Claude Code, naming the files and sessions so Claude can read the logs itself.
+- **Problems tab:** issues that no file covers but keep coming back (2 or more sessions), with their count on the tab. Each problem is a card with a ✕ per session; hover a ✕ to see that moment, or open the card for a prompt that asks Claude where the fix belongs: a new skill, a CLAUDE.md rule or a hook.
+- **When a file starts covering a problem:** each run checks the open problems against today's files. If an edit to a file that was there covers it now, the problem becomes a ✕ on the version that lacked it. If a new file covers it, the problem leaves the list.
 - **Project picker:** look at one project's files and sessions, or Global.
 
 ## Install
@@ -41,16 +42,16 @@ Needs Python 3.10 or later and the `claude` command on your PATH. There's nothin
 
 It only calls Claude when you press **Run harness doctor**, using your own Claude Code login (`claude -p`):
 
-- **Judging:** one Sonnet run per 15 new sessions. Every session with a few messages gets judged once, since an issue no file covers counts too. It reads your messages, each with the end of the Claude message you were answering.
-- **Diagnosing:** one Opus run, at high effort, per file that has a new bad use. It reads the file, its last 3 versions, and the messages around each issue.
+- **Judging:** one Sonnet run per 15 new sessions. Every session with a few messages gets judged, open ones too, since an issue no file covers counts as well; a session with new messages since it was judged gets judged again, and the status line counts those. It reads your messages, each with the end of the Claude message you were answering.
+- **Re-checking:** one Sonnet run after judging, only when the open problems or your files changed since the last check. It reads one line per problem and what each file is for.
 
-Each session is judged once, and each file version is diagnosed once, unless new sessions come in.
+Each skill load in a session gets its own verdict.
 
 ## Privacy
 
 - The server only listens on `127.0.0.1`, and rejects requests that come from other sites.
 - To judge, it sends excerpts of your sessions to Claude through `claude -p`, the same way any Claude Code session sends your messages. Those runs use no tools, and don't load your hooks or settings.
-- It only writes to your files when you press Apply or Revert, and only to the file on that card.
+- It never writes to your instruction files; fixes happen in your own Claude Code session.
 - Its results stay on your machine, in the plugin's data folder (`~/.claude/plugins/data/harness-doctor…/`, or `~/.local/share/harness-doctor` when run by hand). They're deleted 30 days after they're made, and when you uninstall the plugin.
 
 ## How it works, and what can break

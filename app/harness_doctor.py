@@ -2,7 +2,8 @@
 """Harness Doctor: which of your Claude Code instructions help, and which cause trouble.
 
 One card per CLAUDE.md, skill and output style. Each session that used a file is judged a good use (✓) or a bad
-use (✕) by Claude itself, from your own messages; files with new bad uses get a diagnosis (why, and the exact edit).
+use (✕) by Claude itself, from your own messages. Working out a fix takes a conversation, so the page only copies a
+prompt to paste into Claude Code.
 
 Run:   python3 harness_doctor.py                 starts the page on http://127.0.0.1:8737 and opens your browser
        python3 harness_doctor.py --background    the same, detached; if it's already running, just opens the page
@@ -403,8 +404,18 @@ def ran_on(row, s, start, stop):
     return start <= s["t"] < stop
 
 
-def merge_unused(row, sessions):
-    """Fold a version no session ran on into the next one: one diff from before it to after the next, edits added up."""
+def has_marks(row, s, tri):
+    """Does session s give this file a mark on the page? A skill: loaded and judged. CLAUDE.md or a style: a verdict on it."""
+    v = tri.get(s["id"])
+    if not v:
+        return False
+    return row["kind"] == "skill" or any(f.get("file") == row["id"] for f in v.get("files", []))
+
+
+def merge_unused(row, sessions, tri=None):
+    """Fold a version with no marks (no session ran on it, or none the doctor gave a mark) into the next one:
+    one diff from before it to after the next, edits added up. The latest version always stays."""
+    tri = load_triage()["sessions"] if tri is None else tri
     cl, out = row["clusters"], []
     for k, c in enumerate(cl):
         if out and out[-1].get("_fold"):
@@ -412,7 +423,7 @@ def merge_unused(row, sessions):
             before = out[-1]["text"] if out else row["base"]
             c = dict(c, start=prev["start"], edits=prev["edits"] + c["edits"], new=prev["new"], diff=udiff(before, c["text"]) or c["diff"])
         last = k == len(cl) - 1
-        c["_fold"] = not last and not any(ran_on(row, s, c["end"], cl[k + 1]["start"]) for s in sessions)
+        c["_fold"] = not last and not any(ran_on(row, s, c["end"], cl[k + 1]["start"]) and has_marks(row, s, tri) for s in sessions)
         out.append(c)
     for c in out:
         c.pop("_fold", None)
@@ -458,27 +469,14 @@ def build():
         paths |= set(glob.glob(os.path.join(cwd, "CLAUDE.md")))
         paths |= set(glob.glob(os.path.join(cwd, ".claude", "skills", "*", "SKILL.md")))
         paths |= set(glob.glob(os.path.join(cwd, ".claude", "output-styles", "*.md")))
-    applied = load_applied()  # edits applied from the page are versions too, like edits in a session
-    for p, recs in applied.items():
-        for x in recs:
-            n = len(x["items"])
-            events[p].append({"path": p, "t": x["t"], "kind": "rewrite", "session": "applied:" + x["t"], "content": x["after"],
-                              "before": x["before"], "what": f"Applied {n} suggested {'edit' if n == 1 else 'edits'} from Harness Doctor."})
-            if x.get("reverted"):
-                events[p].append({"path": p, "t": x["reverted"], "kind": "rewrite", "session": "reverted:" + x["reverted"],
-                                  "content": x["before"], "before": x["after"], "what": "Reverted the applied edits."})
     paths |= {p for p in events if os.path.isfile(p)}
-    rows = []
+    rows, tri = [], load_triage()["sessions"]
     for p in sorted(paths):
         if os.path.isfile(p) and row_of(p):
             evs = [e for e in events[p] if e["t"] >= cutoff]
             later = outside_change(p, evs, cutoff)
             row = build_row(p, evs + ([later] if later else []), snaps[p])
-            merge_unused(row, sessions)
-            by_t = {"applied:" + x["t"]: x for x in applied.get(p, [])}
-            for c in row["clusters"]:
-                if c["session"] in by_t:
-                    c["applied"] = {"items": by_t[c["session"]]["items"]}
+            merge_unused(row, sessions, tri)
             rows.append(row)
 
     counts = defaultdict(int)
@@ -490,72 +488,15 @@ def build():
 
     return {"from": int((now - datetime.timedelta(days=WINDOW_DAYS)).timestamp() * 1000),
             "to": int(now.timestamp() * 1000),
-            "scopes": scopes, "sessions": sessions, "rows": rows, "diagnoses": load_diagnoses(),
+            "scopes": scopes, "sessions": sessions, "rows": rows,
             "triage": {k: v["files"] for k, v in load_triage()["sessions"].items()},
             "gaps": {k: v["gaps"] for k, v in load_triage()["sessions"].items() if v.get("gaps")},
             "pending": {sc["key"]: pending({"rows": rows, "sessions": sessions}, sc["key"]) for sc in scopes},
             "last_judged": max((v["at"] for v in load_triage()["sessions"].values()), default=None)}
 
 
-# ---------- harness doctor: Claude diagnoses one file from its issues ----------
+# ---------- asking Claude: the page's judging and re-check runs follow the diagnose skill ----------
 SKILL = os.path.normpath(os.path.join(HERE, "..", "skills", "diagnose", "SKILL.md"))
-
-
-def diag_dir():
-    return data_path("diagnoses")
-RUNNING = set()
-
-
-def load_diagnoses():
-    """Saved diagnoses, keyed "file|version time". Ones older than 30 days are deleted."""
-    os.makedirs(diag_dir(), exist_ok=True)
-    out = {}
-    cutoff = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=WINDOW_DAYS)).isoformat()
-    for f in glob.glob(os.path.join(diag_dir(), "*.json")):
-        try:
-            d = json.load(open(f))
-        except ValueError:
-            continue
-        if d.get("at", "") < cutoff:  # 30 days after it was diagnosed
-            os.remove(f)
-            continue
-        out[d["row"] + "|" + (d["version_t"] or "")] = d
-    return out
-
-
-def around(msgs, note):
-    """Messages near the spots that match each sentence of the /insights note (up to ~30)."""
-    keep = set()
-    for sentence in re.split(r"(?<=[.;!?])\s", note or "")[:6]:
-        want = words(sentence)
-        if not want:
-            continue
-        scores = [len(want & words(m["text"])) / (1 + 0.08 * len(words(m["text"])) ** 0.5) for m in msgs]
-        if scores and max(scores) > 0:
-            i = scores.index(max(scores))
-            keep.update(range(max(0, i - 4), min(len(msgs), i + 5)))
-    return [{"who": msgs[i]["who"], "time": msgs[i]["t"], "text": clip(msgs[i]["text"], 700)} for i in sorted(keep)[:30]]
-
-
-def near_use(msgs, row, s):
-    """For a session without issues: the messages around where the skill was loaded, or the opening for CLAUDE.md and styles."""
-    i = 0
-    if row["kind"] == "skill":
-        when = [u["t"] for u in s.get("skills", []) if u["name"] == row["name"]]
-        if when:
-            i = next((k for k, m in enumerate(msgs) if m["t"] >= when[0]), 0)
-    return [{"who": m["who"], "time": m["t"], "text": clip(m["text"], 700)} for m in msgs[max(0, i - 3): i + 9]]
-
-
-def both(a, b):
-    """Messages near the issues plus messages near where the file was used, in time order, without repeats."""
-    seen, out = set(), []
-    for m in sorted(a + b, key=lambda m: m["time"]):
-        key = (m["time"], m["who"])
-        if key not in seen:
-            seen.add(key)
-            out.append(m)
-    return out[:40]
 
 
 def now_iso():
@@ -595,107 +536,59 @@ def skill_body():
     return re.sub(r"^---.*?---\s*", "", read(SKILL) or "", flags=re.S)
 
 
-def window_start(row):
-    """Where the version before the latest one begins: the triage only reads sessions from here on."""
-    cl = row.get("clusters", [])
-    return cl[-2]["end"] if len(cl) >= 2 else ""
-
-
-def history(row, by_id):
-    """The 3 versions before the latest: when, how many edits, the diff, and what the triage found in sessions on each."""
-    cl, tri, out = row.get("clusters", []), load_triage()["sessions"], []
-    for k in range(max(0, len(cl) - 4), len(cl) - 1):
-        start, stop = cl[k]["end"], cl[k + 1]["start"]
-        found = {"when": cl[k]["end"][:10], "edits": cl[k]["edits"], "diff": (cl[k]["diff"] or cl[k]["what"] or "")[:3000],
-                 "worked": 0, "issues": []}
-        for sid, t in tri.items():
-            s = by_id.get(sid)
-            if not s or not (start <= s["t"] < stop):
-                continue
-            for f in t["files"]:
-                if f.get("file") == row["id"]:
-                    if f.get("verdict") == "worked":
-                        found["worked"] += 1
-                    found["issues"] += [i.get("line", "") for i in f.get("issues", [])]
-        out.append(found)
-    return out
-
-
-def run_doctor(row_id, version_t, session_ids):
-    if row_id in RUNNING:
-        return {"ok": False, "message": "Already diagnosing this one."}
-    RUNNING.add(row_id)
-    try:
-        d = json.loads(data_json(False))
-        row = next((r for r in d["rows"] if r["id"] == row_id), None)
-        if not row:
-            return {"ok": False, "message": "That file isn't in the data any more."}
-        v = next((x for x in row["versions"] if x["t"] == version_t), None)
-        if (row["versions"][-1]["t"] if row["versions"] else None) != version_t:
-            return {"ok": False, "message": "Only the latest version can be diagnosed."}
-        by_id = {s["id"]: s for s in d["sessions"]}
-        sessions = []
-        for sid in session_ids[-15:]:  # the latest 15
-            s, logs = by_id.get(sid), glob.glob(os.path.join(CLAUDE, "projects", "*", sid + ".jsonl"))
-            if not s or not logs:
-                continue
-            msgs = (parse_log(logs[0])[0] or {}).get("turns", [])
-            sessions.append({"id": sid, "date": s["t"][:10], "issues": s.get("friction", {}), "note": s.get("detail", ""),
-                             "summary": s.get("summary", ""), "outcome": s.get("outcome", ""), "you": your_words(sid),
-                             "messages": both(around(msgs, s["detail"]) if s.get("friction") else [], near_use(msgs, row, s))})
-        if not sessions:
-            return {"ok": False, "message": "No judged sessions to diagnose."}
-        body = skill_body()
-        doc = {"file": {"name": row["name"], "kind": row["kind"], "path": row["path"], "text": (v["text"] if v else row["base"]) or ""},
-               "history": history(row, by_id), "sessions": sessions}
-        prompt = ("Act as the harness-doctor skill below, in page mode: answer with the JSON only.\n\n" + body +
-                  "\n\n## The input\n" + json.dumps(doc, ensure_ascii=False))
-        try:
-            res = ask_claude(prompt, "Diagnose the file in the input, following the instructions in it.", "opus", effort="high")
-        except (OSError, subprocess.SubprocessError, ValueError) as err:
-            return {"ok": False, "message": f"The diagnosis didn't come back: {err}"}
-        if not isinstance(res, dict) or "why" not in res:
-            return {"ok": False, "message": "The diagnosis came back in the wrong shape. Try again."}
-        out = {"row": row_id, "version_t": version_t, "sessions": [x["id"] for x in sessions],
-               "at": now_iso(),
-               "why": str(res.get("why", "")), "try": [x for x in res.get("try", []) if isinstance(x, (dict, str))][:4],
-               "verdicts": [x for x in res.get("sessions", []) if isinstance(x, dict) and x.get("session")]}
-        os.makedirs(diag_dir(), exist_ok=True)
-        with open(diag_file(row_id, version_t), "w") as fh:
-            json.dump(out, fh, ensure_ascii=False)
-        CACHE["body"] = None  # the next page load includes it
-        return {"ok": True, "diagnosis": out}
-    finally:
-        RUNNING.discard(row_id)
-
-
-def diag_file(row_id, version_t):
-    return os.path.join(diag_dir(), hashlib.sha1(f"{row_id}|{version_t}".encode()).hexdigest()[:16] + ".json")
-
-
-
-
 # ---------- triage: one cheap run that sorts every new session's issues onto the files ----------
-TRIAGE_V = 2  # bump to re-sort every session (2: verdicts quote the user's words)
+TRIAGE_V = 3  # bump to re-sort every session (2: verdicts quote the user's words; 3: a skill loaded twice gets a verdict per load)
+TRIAGE_OK = (2, 3)  # versions still read; a v2 session where a skill loaded twice gets judged again
 JOB = {"state": "idle", "message": "", "pct": None}  # pct: None while the length is unknown
 
 
 def load_triage():
     t = load_json(data_path("triage.json"), {})
     cutoff = iso_ago(days=WINDOW_DAYS)
-    t["sessions"] = {k: v for k, v in t.get("sessions", {}).items() if v.get("at", "") >= cutoff and v.get("v") == TRIAGE_V}
+    t["sessions"] = {k: v for k, v in t.get("sessions", {}).items() if v.get("at", "") >= cutoff and v.get("v") in TRIAGE_OK}
     return t
 
 
-def about(row):
-    """One line on what a file is for: its description, or what kind of file it is."""
-    text = read(row["id"]) or ""
+def about(row, text=None):
+    """What a file is for: its description, or else its headings and rule titles, or else what kind of file it is.
+    Pass the text of an older version to say what that version covered."""
+    text = (read(row["id"]) if text is None else text) or ""
     fm = re.match(r"---\s*\n(.*?)\n---", text, re.S)
     desc = re.search(r"^description:\s*(.+)$", fm.group(1), re.M) if fm else None
     if desc:
         return one_line(desc.group(1), 240)
     where = "every session" if row["scope"] == "global" else "sessions in " + os.path.basename(row["scope"])
-    return f"{row['kind']} loaded in {where}"
+    titles = rule_titles(text + "".join("\n" + (read(p) or "") for p in imports(row["id"], text)))
+    return f"{row['kind']} loaded in {where}" + (": " + titles if titles else "")
+
+
+def imports(path, text):
+    """Files a CLAUDE.md pulls in with @path lines (one level), as they are today; a file that's gone is skipped."""
+    out = []
+    for m in re.finditer(r"^@(\S+)\s*$", text or "", re.M):
+        p = os.path.expanduser(m.group(1))
+        out.append(p if os.path.isabs(p) else os.path.join(os.path.dirname(path), p))
+    return out
+
+
+def rule_titles(text, cap=900):
+    """What a CLAUDE.md covers, without its full text: its headings and the bold title that starts each rule."""
+    out = []
+    for line in (text or "").splitlines():
+        m = re.match(r"\s*#{1,4}\s+(.+)", line) or re.match(r"\s*(?:\d+\.|[-*])\s+\*\*(.+?)\*\*", line)
+        if m:
+            out.append(m.group(1).strip().rstrip(".:,"))
+    return one_line(" · ".join(out), cap) if out else ""
+
+
+def version_at(row, t):
+    """The text of a file in place at time t: (the index of the last edit before t, or -1 for the text before the logs,
+    its text). Per edit, not per page version, since versions with no marks get folded into the next one."""
+    k, text = -1, row.get("base")
+    for i, v in enumerate(row.get("versions", [])):
+        if v["t"] <= t:
+            k, text = i, v["text"]
+    return k, (text if text is not None else read(row["id"]))
 
 
 def touched_files(s, rows):
@@ -726,25 +619,103 @@ def your_words(sid, cap=40):
 
 def run_triage(d, todo):
     rows = {r["id"]: r for r in d["rows"]}
-    files, items = {}, []
+    files, real, items = {}, {}, []  # files: one entry per file version, so each session sees what its version covered
     for s in todo:
-        ids = touched_files(s, d["rows"])
-        for i in ids:
-            files.setdefault(i, {"id": i, "name": rows[i]["name"], "kind": rows[i]["kind"], "about": about(rows[i])})
+        keys = []
+        for i in touched_files(s, d["rows"]):
+            k, text = version_at(rows[i], s["t"])
+            key = f"{i}#v{k + 1}"
+            if key not in files:
+                files[key] = {"id": key, "name": rows[i]["name"], "kind": rows[i]["kind"], "about": about(rows[i], text)}
+                real[key] = i
+            keys.append(key)
+        twice = loads_by_skill(s, more_than_once=True)
+        uses = {k: twice[rows[real[k]]["name"]] for k in keys if rows[real[k]]["kind"] == "skill" and rows[real[k]]["name"] in twice}
         items.append({"session": s["id"], "date": s["t"][:10], "issues": s.get("friction", {}), "note": s.get("detail", ""),
-                      "summary": s.get("summary", ""), "outcome": s.get("outcome", ""), "files": ids, "you": your_words(s["id"])})
+                      "summary": s.get("summary", ""), "outcome": s.get("outcome", ""), "files": keys, "you": your_words(s["id"]),
+                      **({"uses": uses} if uses else {})})
     doc = {"files": list(files.values()), "known_gaps": known_gaps(), "sessions": items}
     prompt = ("Act as the harness-doctor skill below, in triage mode: answer with the JSON only.\n\n" + skill_body() +
               "\n\n## The input\n" + json.dumps(doc, ensure_ascii=False))
     res = ask_claude(prompt, "Triage the sessions in the input, following the instructions in it.", "sonnet") or {}
-    out = {s["id"]: {"at": now_iso(), "v": TRIAGE_V, "files": [], "gaps": []} for s in todo}  # judged, even when nothing was found
+    out = {s["id"]: {"at": now_iso(), "v": TRIAGE_V, "n": s["n"], "files": [], "gaps": []} for s in todo}  # judged, even when nothing was found; n: your messages then
     for x in res.get("sessions", []):
         if isinstance(x, dict) and x.get("session") in out:
-            out[x["session"]]["files"] = [f for f in x.get("files", []) if isinstance(f, dict) and f.get("file") in files]
+            out[x["session"]]["files"] = [clean_use(dict(f, file=real[f["file"]])) for f in x.get("files", []) if isinstance(f, dict) and f.get("file") in files]
             out[x["session"]]["gaps"] = [g for g in x.get("gaps", []) if isinstance(g, dict) and g.get("topic") and g.get("line")]
     return out
 
 
+def clean_use(f):
+    """A verdict's `use` (which load of a skill, 1 for the first) as a whole number, or none (one usage per session)."""
+    u = f.pop("use", None)
+    if isinstance(u, int) and u >= 1:
+        f["use"] = u
+    return f
+
+
+# ---------- re-check: a gap a file covers today leaves the list ----------
+def recheck_key(t, d):
+    """Changes when the open gaps or any file's versions change; the re-check only runs then."""
+    gaps = sorted((sid, g["topic"]) for sid, v in t["sessions"].items() for g in v.get("gaps", []))
+    files = sorted((r["id"], r["clusters"][-1]["end"] if r.get("clusters") else "") for r in d["rows"])
+    return hashlib.sha1(json.dumps([gaps, files]).encode()).hexdigest()[:16]
+
+
+def recheck_gaps(d, t):
+    """Ask once which open gaps a file covers today, then settle them. Returns how many gaps left the list."""
+    key = recheck_key(t, d)
+    by_id = {s["id"]: s for s in d["sessions"]}
+    topics = defaultdict(list)
+    for sid, v in t["sessions"].items():
+        for g in v.get("gaps", []):
+            if sid in by_id:
+                topics[g["topic"]].append({"date": by_id[sid]["t"][:10], "project": os.path.basename(by_id[sid]["cwd"]), "line": g["line"]})
+    if not topics or t.get("recheck") == key:
+        return 0
+    files = [{"id": r["id"], "name": r["name"], "kind": r["kind"],
+              "scope": "global" if r["scope"] == "global" else os.path.basename(r["scope"]), "about": about(r)} for r in d["rows"]]
+    doc = {"files": files, "gaps": [{"topic": k, "moments": v} for k, v in topics.items()]}
+    prompt = ("Act as the harness-doctor skill below, in re-check mode: answer with the JSON only.\n\n" + skill_body() +
+              "\n\n## The input\n" + json.dumps(doc, ensure_ascii=False))
+    res = ask_claude(prompt, "Re-check the gaps in the input, following the instructions in it.", "sonnet") or {}
+    ids = {r["id"] for r in d["rows"]}
+    covered = {x["topic"]: x["file"] for x in res.get("covered", []) if isinstance(x, dict) and x.get("file") in ids}
+    n = settle_gaps(t, d, covered)
+    t["recheck"] = recheck_key(t, d)  # after settling, so a later run with nothing new skips the call
+    return n
+
+
+def settle_gaps(t, d, covered):
+    """covered: {topic: file id that covers it today}. For each session with that gap:
+    the file was there and in use then → the gap becomes a ✕ on that file in that session (its version then lacked it);
+    the file came later, or a skill wasn't loaded → the gap is deleted;
+    the file belongs to another project → the gap stays."""
+    rows, by_id, n = {r["id"]: r for r in d["rows"]}, {s["id"]: s for s in d["sessions"]}, 0
+    for sid, v in t["sessions"].items():
+        s, keep = by_id.get(sid), []
+        for g in v.get("gaps", []):
+            fid = covered.get(g["topic"])
+            row = rows.get(fid)
+            if not (s and row) or (row["scope"] != "global" and not in_scope(s, row["scope"])):
+                keep.append(g)  # nothing covers it, or only another project's file does
+                continue
+            n += 1
+            if fid not in touched_files(s, d["rows"]):
+                continue  # deleted: the fix came after this session
+            issue = {"type": g.get("type") or "issue", "line": g["line"], "you": g.get("you"), "you_marks": g.get("you_marks", []), "gap": g["topic"]}
+            f = next((f for f in v["files"] if f.get("file") == fid), None)
+            if f:
+                if f.get("verdict") != "failed":
+                    f.update(verdict="failed", line=g["line"])  # its "what went right" line no longer fits
+                f["issues"] = f.get("issues", []) + [issue]
+            else:
+                v["files"].append({"file": fid, "verdict": "failed", "line": g["line"], "you": g.get("you"), "issues": [issue]})
+        v["gaps"] = keep
+    return n
+
+
+# ---------- problems: where the fix for a gap belongs ----------
 def known_gaps(cap=60):
     """Gap topics found so far (the latest line for each), so the triage reuses a topic for the same problem."""
     seen = {}
@@ -765,70 +736,98 @@ def rows_in(d, scope):
     return [r for r in d["rows"] if r["scope"] != "global" and (scope == r["scope"] or scope.startswith(r["scope"] + "/"))]
 
 
-def files_to_diagnose(d, scope="global"):
-    """Files on the page for this scope (a project's own files plus the global ones) whose latest version has a bad
-    use, from the triage, that its diagnosis hasn't seen yet. Global files always look at every session."""
-    tri, diags, jobs = load_triage()["sessions"], load_diagnoses(), []
-    rows = rows_in(d, scope) + (rows_in(d, "global") if scope != "global" else [])
-    touched = {s["id"]: set(touched_files(s, d["rows"])) for s in d["sessions"] if s["id"] in tri}
-    for r in rows:
-        where = "global" if r["scope"] == "global" else scope
-        vt = r["versions"][-1]["t"] if r["versions"] else None
-        since = r["clusters"][-1]["end"] if r.get("clusters") else ""
-        used = sorted((s for s in d["sessions"] if r["id"] in touched.get(s["id"], ()) and in_scope(s, where) and
-                       (any(u["name"] == r["name"] and u["t"] >= since for u in s.get("skills", [])) if r["kind"] == "skill" else s["t"] >= since)),
-                      key=lambda s: s["t"])
-        bad = [s for s in used if any(f.get("file") == r["id"] and f.get("verdict") == "failed" for f in tri.get(s["id"], {}).get("files", []))]
-        seen = diags.get(r["id"] + "|" + (vt or ""), {}).get("sessions", [])
-        if any(s["id"] not in seen for s in bad):
-            jobs.append((r, vt, [s["id"] for s in used]))
-    return jobs
-
-
 def pending(d, scope="global"):
-    """What "Run harness doctor" would do now for a scope; the page hides the cards until it's all done."""
-    t, quiet = load_triage(), iso_ago(minutes=30)
-    judge = sum(1 for s in d["sessions"] if needs_judging(s, d, scope, t, quiet))
-    return {"has_data": bool(t["sessions"]), "judge": judge, "diagnose": len(files_to_diagnose(d, scope))}
+    """What "Run harness doctor" would do now for a scope: finished and ongoing sessions to judge (for the first time, or
+    again because they have new messages), and whether the problems need a re-check."""
+    t, live = load_triage(), live_sessions()
+    todo = [s for s in d["sessions"] if to_judge(s, scope, t)]
+    ongoing = sum(1 for s in todo if s["id"] in live)
+    recheck = any(v.get("gaps") for v in t["sessions"].values()) and t.get("recheck") != recheck_key(t, d)
+    return {"has_data": bool(t["sessions"]), "judge": len(todo) - ongoing, "ongoing": ongoing, "recheck": recheck}
 
 
-def needs_judging(s, d, scope, t, quiet=None):
-    """A finished session in scope with a few messages, not judged yet, or judged before gaps were checked.
-    Every session counts, not only ones that used a file: an issue no file covers is a gap."""
-    quiet = quiet or iso_ago(minutes=30)  # skip sessions that may still be going
+def live_sessions():
+    """Session ids a running Claude Code still has open (ongoing): each process writes ~/.claude/sessions/<pid>.json."""
+    ids = set()
+    for f in glob.glob(os.path.join(CLAUDE, "sessions", "*.json")):
+        j = load_json(f, {})
+        pid, sid = j.get("pid"), j.get("sessionId")
+        if not (pid and sid):
+            continue
+        try:
+            os.kill(int(pid), 0)  # signal 0 only checks the process exists
+        except ProcessLookupError:
+            continue  # a stale file from a process that's gone
+        except (PermissionError, OSError, ValueError):
+            pass
+        ids.add(sid)
+    return ids
+
+
+def to_judge(s, scope, t):
+    """Why session s needs judging now, open or closed: "new" (never judged, or judged before gaps or one verdict per
+    skill load existed), "again" (it has new messages since it was judged; the newest verdict replaces the old one),
+    or None. Every session counts, not only ones that used a file: an issue no file covers is a gap."""
+    if s["n"] < 3 or not in_scope(s, scope):
+        return None
     done = t["sessions"].get(s["id"])
-    if (done and "gaps" in done) or s["n"] < 3 or s["end"] >= quiet or not in_scope(s, scope):
+    if not done or "gaps" not in done or (done.get("v", 0) < 3 and loads_by_skill(s, more_than_once=True)):
+        return "new"
+    return "again" if grew(s, done) else None
+
+
+def needs_judging(s, d, scope, t):
+    return to_judge(s, scope, t) is not None
+
+
+def grew(s, done):
+    """Has the session had new messages from you since it was judged? (Older results don't keep the count: compare times.)"""
+    if "n" in done:
+        return s["n"] > done["n"]
+    def when(x):
+        d = datetime.datetime.fromisoformat(x.replace("Z", "+00:00"))
+        return d if d.tzinfo else d.replace(tzinfo=datetime.timezone.utc)
+    try:
+        return when(s["end"]) > when(done["at"])
+    except (KeyError, ValueError, TypeError):
         return False
-    return True
+
+
+def loads_by_skill(s, more_than_once=False):
+    """{skill name: the times it loaded in session s, in order}; each load is one usage with its own verdict."""
+    out = defaultdict(list)
+    for u in s.get("skills", []):
+        out[u["name"]].append(u["t"])
+    return {k: sorted(v) for k, v in out.items() if len(v) > 1 or not more_than_once}
 
 
 def doctor_job(scope="global"):
-    """The page's button, for the chosen scope: judge every finished session it hasn't judged (one cheap run per 15,
-    from your messages, plus the /insights note where there is one), then diagnose the files with new bad uses."""
+    """The page's button, for the chosen scope: judge every session it hasn't judged or that has new messages (one cheap run per 15,
+    from your messages, plus the /insights note where there is one), then re-check the problems no file covered."""
     try:
         JOB.update(state="running", message="Finding new sessions…", pct=None)
         d, t = json.loads(data_json(True)), load_triage()
         todo = [s for s in d["sessions"] if needs_judging(s, d, scope, t)]
         for i in range(0, len(todo), 15):
-            JOB.update(message=f"Judging sessions {i + 1}–{min(i + 15, len(todo))} of {len(todo)}…", pct=round(60 * i / len(todo)))
+            JOB.update(message=f"Judging sessions {i + 1}–{min(i + 15, len(todo))} of {len(todo)}…", pct=round(90 * i / len(todo)))
             for sid, v in run_triage(d, todo[i:i + 15]).items():
                 old = t["sessions"].get(sid)
-                if old and old.get("v") == TRIAGE_V:
+                if old and "gaps" not in old:
                     v["files"] = old["files"]  # judged before gaps existed: keep its verdicts, add the gaps
                 t["sessions"][sid] = v
             save_json(data_path("triage.json"), t)
+        # Then re-check the open gaps against today's files (one cheap run, only when the gaps or files changed).
+        JOB.update(message="Checking the problems no file covered against your files…", pct=90)
+        try:
+            settled = recheck_gaps(d, t)
+        except (OSError, subprocess.SubprocessError, ValueError) as err:
+            settled, t = 0, load_triage()  # leave the gaps as they were
+            print(f"Re-check didn't come back: {err}", file=sys.stderr)
         save_json(data_path("triage.json"), t)
-        # Then Diagnose (Opus) each file with a bad use it hasn't diagnosed yet, on its latest version.
         CACHE["body"] = None
-        jobs, failed_runs = files_to_diagnose(json.loads(data_json(True)), scope), []
-        for n, (row, vt, ids) in enumerate(jobs):
-            JOB.update(message=f"Diagnosing {row['name']} ({n + 1} of {len(jobs)})…", pct=60 + round(40 * n / len(jobs)))
-            res = run_doctor(row["id"], vt, ids)
-            if not res.get("ok"):
-                failed_runs.append(f"{row['name']}: {res.get('message')}")
-        CACHE["body"] = None
-        msg = f"Done: judged {len(todo)} new sessions, diagnosed {len(jobs)} {'file' if len(jobs) == 1 else 'files'}."
-        JOB.update(state="done", pct=100, message=msg + (" Couldn't diagnose " + "; ".join(failed_runs) if failed_runs else ""))
+        msg = (f"Done: judged {len(todo)} new {'session' if len(todo) == 1 else 'sessions'}" +
+               (f", and {settled} {'problem is' if settled == 1 else 'problems are'} now covered by a file." if settled else "."))
+        JOB.update(state="done", pct=100, message=msg)
     except (OSError, subprocess.SubprocessError, ValueError, KeyError, TypeError) as err:
         JOB.update(state="error", message=f"Harness doctor stopped: {err}")
 
@@ -843,119 +842,6 @@ def data_json(fresh):
             CACHE["body"] = json.dumps(build(), ensure_ascii=False).encode()
             CACHE["at"] = time.time()
         return CACHE["body"]
-
-
-# ---------- applying the doctor's suggested edits from the page ----------
-APPLY_LOCK = threading.Lock()
-
-
-def applied_file():
-    return data_path("applied.json")
-
-
-def load_applied():
-    """Edits applied from the page, per file: the text before and after, and the suggestions. Kept 30 days."""
-    cutoff = iso_ago(days=WINDOW_DAYS)
-    out = {p: [x for x in recs if x.get("t", "") >= cutoff] for p, recs in load_json(applied_file(), {}).items()}
-    return {p: recs for p, recs in out.items() if recs}
-
-
-def edit_text(text, item):
-    """One suggested edit ({find, text, after}) on a file's text. None when the text it points at isn't there exactly once."""
-    find, new, after = item.get("find"), item.get("text"), item.get("after")
-    if find:
-        if text.count(find) != 1:
-            return None
-        i = text.index(find)
-        if new:
-            return text[:i] + new + text[i + len(find):]
-        j = i + len(find)
-        if (i == 0 or text[i - 1] == "\n") and text[j:j + 1] == "\n":
-            j += 1  # a cut of whole lines takes its line break too
-        return text[:i] + text[j:]
-    if not new:
-        return None
-    new = new.rstrip("\n")
-    if after:
-        if text.count(after) != 1:
-            return None
-        j = text.find("\n", text.index(after) + len(after))  # the end of the line it goes after
-        return text + "\n" + new if j == -1 else text[:j + 1] + new + "\n" + text[j + 1:]
-    return text.rstrip("\n") + "\n\n" + new + "\n"
-
-
-def write_file(path, text):
-    """Write a whole file in one step, keeping its permissions (and writing through a symlink)."""
-    real = os.path.realpath(path)
-    mode = os.stat(real).st_mode
-    with open(real + ".hd-tmp", "w") as fh:
-        fh.write(text)
-    os.chmod(real + ".hd-tmp", mode)
-    os.replace(real + ".hd-tmp", real)
-
-
-def apply_suggestions(row_id, version_t, picks, texts=None):
-    """Write the picked suggestions of the latest version's diagnosis into the file, all or none.
-    texts: {index: new text} where the user edited a suggestion's text on the page."""
-    with APPLY_LOCK:
-        d = json.loads(data_json(True))
-        row = next((r for r in d["rows"] if r["id"] == row_id), None)  # only files on the page can be written
-        if not row:
-            return {"ok": False, "message": "That file isn't on the page any more."}
-        if (row["versions"][-1]["t"] if row["versions"] else None) != version_t:
-            return {"ok": False, "message": "The file changed since this diagnosis, so nothing was applied."}
-        items = [dict(x) if isinstance(x, dict) else x for x in
-                 (load_diagnoses().get(row_id + "|" + (version_t or "")) or {}).get("try", [])]
-        for k, v in (texts or {}).items():  # only the text of a suggestion that adds text can be edited
-            if str(k).isdigit() and int(k) < len(items) and isinstance(items[int(k)], dict) and items[int(k)].get("text") and isinstance(v, str):
-                items[int(k)]["text"] = v
-        picks = sorted({i for i in picks if 0 <= i < len(items) and isinstance(items[i], dict)})
-        if not picks:
-            return {"ok": False, "message": "Nothing picked to apply."}
-        before = read(row_id)
-        if before is None:
-            return {"ok": False, "message": "Couldn't read the file."}
-        text = before
-        for i in picks:
-            nxt = edit_text(text, items[i])
-            if nxt is None:
-                return {"ok": False, "message": f"Edit {i + 1} doesn't match the file any more, so nothing was applied."}
-            text = nxt
-        mtime = os.stat(os.path.realpath(row_id)).st_mtime  # put back by a revert, so the file doesn't look changed
-        write_file(row_id, text)
-        recs = load_applied()
-        recs.setdefault(row_id, []).append({"t": now_iso(), "from": version_t, "before": before, "after": text, "mtime_before": mtime,
-                                            "picks": picks, "items": [items[i] for i in picks]})
-        save_json(applied_file(), recs)
-        CACHE["body"] = None
-        return {"ok": True}
-
-
-def revert_applied(row_id):
-    """Put back the text from before the last Apply, if the file is still as Apply left it."""
-    with APPLY_LOCK:
-        recs = load_applied()
-        mine = recs.get(row_id) or []
-        last = mine[-1] if mine else None
-        if not last or last.get("reverted"):
-            return {"ok": False, "message": "Nothing to revert."}
-        if read(row_id) != last["after"]:
-            return {"ok": False, "message": "The file changed after the edits went in, so nothing was reverted."}
-        d = json.loads(data_json(True))
-        row = next((r for r in d["rows"] if r["id"] == row_id), None)
-        used = bool(row) and any(ran_on(row, s, last["t"], "9999") for s in d["sessions"])
-        write_file(row_id, last["before"])
-        if used:
-            last["reverted"] = now_iso()  # sessions ran on it: both versions stay in the history
-        else:
-            mine.pop()  # nothing ran on it: as if it never happened, modified time included
-            if last.get("mtime_before"):
-                os.utime(os.path.realpath(row_id), (time.time(), last["mtime_before"]))
-            if not mine:
-                recs.pop(row_id, None)
-        save_json(applied_file(), recs)
-        CACHE["body"] = None
-        return {"ok": True}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -988,33 +874,17 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         # The custom header can't be sent cross-site without a CORS preflight, which this server never allows.
-        if not self.local() or self.path not in ("/api/doctor", "/api/diagnose", "/api/apply", "/api/revert") or self.headers.get("X-Harness-Doctor") != "1":
+        if not self.local() or self.path != "/api/doctor" or self.headers.get("X-Harness-Doctor") != "1":
             return self.reply(403, b'{"ok":false,"message":"forbidden"}', "application/json")
-        if self.path == "/api/doctor":
-            if JOB["state"] == "running":
-                return self.reply(200, b'{"ok":false,"message":"Already running."}', "application/json")
-            try:
-                scope = str(json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}").get("scope") or "global")
-            except ValueError:
-                scope = "global"
-            JOB.update(state="running", message="Starting…", pct=None)
-            threading.Thread(target=doctor_job, args=(scope,), daemon=True).start()
-            return self.reply(200, b'{"ok":true}', "application/json")
+        if JOB["state"] == "running":
+            return self.reply(200, b'{"ok":false,"message":"Already running."}', "application/json")
         try:
-            req = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
-            if self.path == "/api/apply":
-                vt = req.get("version_t")
-                res = apply_suggestions(str(req["row"]), str(vt) if vt else None, [int(i) for i in req.get("picks", [])],
-                                        req.get("texts") if isinstance(req.get("texts"), dict) else None)
-            elif self.path == "/api/revert":
-                res = revert_applied(str(req["row"]))
-            else:
-                res = run_doctor(str(req["row"]), req.get("version_t"), [str(x) for x in req.get("sessions", [])])
-        except (ValueError, KeyError, TypeError) as err:
-            res = {"ok": False, "message": f"Bad request: {err}"}
-        except OSError as err:
-            res = {"ok": False, "message": f"Couldn't write the file: {err}"}
-        self.reply(200, json.dumps(res, ensure_ascii=False).encode(), "application/json")
+            scope = str(json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}").get("scope") or "global")
+        except ValueError:
+            scope = "global"
+        JOB.update(state="running", message="Starting…", pct=None)
+        threading.Thread(target=doctor_job, args=(scope,), daemon=True).start()
+        self.reply(200, b'{"ok":true}', "application/json")
 
 
 def reload_on_change():

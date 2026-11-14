@@ -22,7 +22,7 @@ h1{font:700 42px/1.05 Fredoka,system-ui,sans-serif;margin:0;letter-spacing:-.01e
 .pill[aria-pressed="true"]{background:var(--blue-bg);border-color:var(--blue-bg);color:var(--blue)}
 .pill[aria-pressed="false"]{color:var(--soft)}
 .go{background:var(--ink);color:var(--bg);border-color:var(--ink)}
-#msg{color:var(--soft);font-size:15px}
+#msg{color:var(--soft);font-size:15px;flex-basis:100%}
 .go{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-width:190px}
 .spin{width:16px;height:16px;border-radius:50%;border:3px solid currentColor;border-right-color:transparent;animation:spin .8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -35,34 +35,22 @@ h1{font:700 42px/1.05 Fredoka,system-ui,sans-serif;margin:0;letter-spacing:-.01e
 .card:hover{transform:translateY(-2px)}
 .card.idle{box-shadow:none;background:transparent;outline:2px dashed var(--line);outline-offset:-2px}
 .card.idle>:not(.more),.card.idle::before{opacity:.55}
-.card.gap{cursor:default;box-shadow:none;background:transparent;outline:2px dashed color-mix(in srgb,var(--coral) 45%,var(--line));outline-offset:-2px}
-.card.gap::before{display:none}
-.card.gap:hover{transform:none}
 .nm{font:600 23px/1.2 Fredoka,system-ui,sans-serif;overflow-wrap:anywhere}
 .sub{color:var(--soft);font-size:14px;overflow-wrap:anywhere}
 .sub .kp{position:relative;cursor:copy}
 .sub .kp .path{position:absolute;left:-8px;top:-4px;z-index:2;padding:3px 8px;border-radius:8px;background:var(--card);color:var(--ink);white-space:nowrap;box-shadow:0 4px 14px rgba(0,0,0,.25);opacity:0;pointer-events:none;transition:opacity .12s}
 .sub .kp:hover .path{opacity:1;pointer-events:auto}
 .sub .kp .path.done{color:var(--green);font-weight:700}
-.xs{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:nowrap;overflow:hidden;min-width:0;padding:4px;margin:-4px}
-.x,.ok{position:relative;flex:none;width:54px;height:54px;border-radius:18px;display:grid;place-items:center;font:700 26px/1 Fredoka,system-ui,sans-serif;cursor:default;transition:transform .1s ease}
+.xs{display:flex;align-items:center;gap:8px;flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;min-width:0;padding:4px;margin:-4px;user-select:none;--fl:0px;--fr:0px;-webkit-mask-image:linear-gradient(to right,transparent 0,#000 var(--fl),#000 calc(100% - var(--fr)),transparent 100%);mask-image:linear-gradient(to right,transparent 0,#000 var(--fl),#000 calc(100% - var(--fr)),transparent 100%)}
+.xs::-webkit-scrollbar{display:none}
+.xs>:first-child{margin-left:auto}
+.xs.scrolls{cursor:grab}.xs.dragging{cursor:grabbing}
+.x,.ok{position:relative;flex:none;width:40px;height:40px;border-radius:13px;display:grid;place-items:center;font:700 19px/1 Fredoka,system-ui,sans-serif;cursor:default;transition:transform .1s ease}
 .x{background:var(--coral-bg);color:var(--coral)}
 .ok{background:var(--green-bg);color:var(--green)}
 .x:hover,.ok:hover{transform:scale(1.08)}
-.vsq{flex:none;width:54px;height:54px;border-radius:18px;border:2px solid var(--line);background:var(--bg);color:var(--ink);font:700 18px Fredoka,system-ui,sans-serif;cursor:pointer;display:flex;align-items:center;transition:transform .1s ease}
-.vsq:hover{transform:scale(1.08)}
-.vsq{position:relative;justify-content:center;line-height:1}
-.vsq .car{position:absolute;left:50%;transform:translateX(-50%);font-size:7px;padding:2px 10px;opacity:.2;cursor:pointer;transition:opacity .15s}
-.vsq .car.up{top:1px}.vsq .car.down{bottom:1px}
-.vsq:hover .car,.vsq:focus-visible .car{opacity:.6}
-.vsq .car:hover{opacity:1}
-.vsq .car.dim,.vsq:hover .car.dim{opacity:0;cursor:default}
-.vsq.old{border-color:var(--kind);color:var(--kind)}
-.vsq.on{background:var(--kind);border-color:var(--kind);color:var(--card)}
 .vdiff{grid-column:1/-1;border-top:2px dashed var(--line);margin-top:10px;padding-top:12px;cursor:auto}
 .vdiff h3{font:600 16px Fredoka,system-ui,sans-serif;margin:0}
-.xmore{flex:none;height:54px;display:flex;align-items:center;gap:8px;padding:0 14px;border-radius:18px;border:2px dashed var(--line);font:700 16px Fredoka,system-ui,sans-serif;white-space:nowrap}
-.xmore .mx{color:var(--coral)}.xmore .mok{color:var(--green)}
 #tip{position:fixed;z-index:10;max-width:440px;background:var(--card);color:var(--ink);border:2px solid var(--line);border-radius:16px;padding:10px 12px;box-shadow:0 10px 30px rgba(0,0,0,.25);font-size:14px;pointer-events:none}
 #tip .thead{display:flex;justify-content:space-between;align-items:baseline;gap:14px;margin-bottom:4px}
 #tip b{font:600 21px/1.2 Fredoka,system-ui,sans-serif;color:var(--coral)}
@@ -73,41 +61,20 @@ h1{font:700 42px/1.05 Fredoka,system-ui,sans-serif;margin:0;letter-spacing:-.01e
 #tip mark{background:var(--coral-bg);color:var(--coral);font-weight:700;border-radius:5px;padding:0 3px}
 #tip .meta{margin-top:6px}
 #tip .ihead{margin-top:8px;font-weight:700}
-.x .n{position:absolute;right:6px;bottom:4px;font:700 11px Nunito,system-ui,sans-serif}
 .more{grid-column:1/-1;border-top:2px dashed var(--line);margin-top:10px;padding-top:14px;display:grid;gap:18px;cursor:auto}
 .more h3{font:600 16px Fredoka,system-ui,sans-serif;margin:0}
 .more ul{margin:0;padding:0;list-style:none;display:grid;gap:8px}
 .meta{color:var(--soft);font-size:13px}
-.fhead{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:6px}
+.fhead{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px}
+.fhead .pill{font-size:14px;padding:6px 14px}
+.pbox{background:var(--bg);border-radius:14px;padding:12px 14px;font:13px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;overflow-wrap:anywhere;max-height:300px;overflow:auto;cursor:text}
 .mini{font:700 13px Nunito,system-ui,sans-serif;color:var(--blue);background:var(--blue-bg);border:none;border-radius:999px;padding:5px 12px;cursor:pointer}
 .mini:disabled{opacity:.6;cursor:default}
-.try{gap:10px!important}
-.try li{background:var(--bg);border-radius:16px;padding:12px 14px;display:grid;gap:8px}
-.try .tw{font:600 18px/1.45 Nunito,system-ui,sans-serif}
-.try .lab{font:700 13px Nunito,system-ui,sans-serif;color:var(--soft)}
-.try .code{font:12.5px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;word-break:break-word;border-radius:10px;padding:6px 10px}
-.try .top{display:flex;gap:14px;align-items:flex-start;justify-content:space-between}
-.try .edit{position:relative}
-.try .edit .code{padding-right:100px;outline:none;cursor:text}
-.try .edit .code:focus{box-shadow:inset 0 0 0 2px var(--green)}
-.back{position:absolute;top:6px;right:6px;font:700 13px Nunito,system-ui,sans-serif;color:var(--green);background:var(--card);border:none;border-radius:999px;padding:3px 10px;cursor:pointer}
-.try li.pick{cursor:pointer}
-.try li.picked{outline:2px solid var(--green);outline-offset:-2px}
-.use{flex:none;font:700 14px Nunito,system-ui,sans-serif;color:var(--green);background:transparent;border:2px solid var(--green-bg);border-radius:999px;padding:5px 14px;cursor:pointer}
-.use:hover{border-color:var(--green)}
-.use[aria-pressed="true"]{background:var(--green);border-color:var(--green);color:var(--card)}
 .ctx{position:fixed;z-index:20;max-width:min(440px,calc(100vw - 16px));background:var(--card);border:2px solid var(--line);border-radius:14px;padding:6px;box-shadow:0 10px 30px rgba(0,0,0,.3)}
 .ctx button{display:block;width:100%;text-align:left;font:700 14px Nunito,system-ui,sans-serif;color:var(--ink);background:transparent;border:none;border-radius:10px;padding:8px 12px;cursor:pointer}
 .ctx button:hover,.ctx button:focus-visible{background:var(--bg);outline:none}
 .ctx .q{color:var(--soft);font:400 13px/1.45 Nunito,system-ui,sans-serif;margin-top:4px;white-space:pre-wrap;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:7;overflow:hidden}
-.dock{position:fixed;right:24px;bottom:24px;z-index:5;display:flex;gap:10px}
-.dock:empty{display:none}
 .still *,.still *::before,.still *::after{transition:none!important}
-.act{font:700 16px Nunito,system-ui,sans-serif;border:none;border-radius:999px;padding:13px 24px;cursor:pointer;background:var(--green);color:var(--card);box-shadow:0 8px 24px rgba(0,0,0,.28);transition:transform .1s ease}
-.act:hover{transform:translateY(-2px)}
-.act.rev{background:var(--coral-bg);color:var(--coral)}
-.act:disabled{opacity:.6;cursor:default}
-.try .cut{background:var(--coral-bg)}.try .add{background:var(--green-bg)}.try .ctx{color:var(--soft);padding-left:0}
 pre{margin:0;max-height:320px;overflow:auto;background:var(--bg);border-radius:14px;padding:10px 12px;font:12.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;word-break:break-word}
 pre .a{color:#1F9D6B;display:block}pre .d{color:var(--coral);display:block}pre .h{color:var(--soft);display:block}
 pre.clamp{max-height:170px;overflow:hidden;-webkit-mask-image:linear-gradient(#000 55%,transparent);mask-image:linear-gradient(#000 55%,transparent)}
@@ -132,8 +99,34 @@ pre.tall{max-height:65vh}
 .quiet{color:var(--soft);font-size:15px;margin:6px 4px}
 .empty{color:var(--soft);font-size:18px;text-align:center;padding:56px 16px;border:2px dashed var(--line);border-radius:18px}
 .empty b{color:var(--ink)}
+.card.k-gaps{--kind:var(--coral)}
+.vsq{flex:none;width:38px;height:44px;margin-left:6px;border:none;border-radius:10px;background:transparent;color:var(--soft);font:700 15px Fredoka,system-ui,sans-serif;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;position:relative;transition:background .12s,color .12s}
+.vsq:hover,.vsq:focus-visible{background:var(--bg);color:var(--ink);outline:none}
+.vsq .car{position:absolute;left:50%;transform:translateX(-50%);font-size:7px;padding:2px 10px;opacity:.35;cursor:pointer;transition:opacity .15s}
+.vsq .car.up{top:2px}.vsq .car.down{bottom:2px}
+.vsq:hover .car,.vsq:focus-visible .car{opacity:.7}
+.vsq .car:hover{opacity:1}
+.vsq .car.dim,.vsq:hover .car.dim{opacity:0;cursor:default}
+.vsq.old{color:var(--kind)}
+.vsq.on{background:color-mix(in srgb,var(--kind) 22%,transparent);color:var(--ink)}
+.vseg{position:relative}
+.vseg.sel .x,.vseg.sel .ok{box-shadow:0 0 0 1.5px color-mix(in srgb,var(--ink) 28%,transparent)}
+.vseg.sel .vnone{border-color:color-mix(in srgb,var(--ink) 28%,transparent)}
+.vseg{flex:none;display:flex;align-items:center;gap:8px}
+.vseg.old{padding-left:19px}
+.vseg.old::before{content:"";position:absolute;left:4px;top:50%;width:3px;height:20px;margin-top:-10px;border-radius:3px;background:color-mix(in srgb,var(--soft) 35%,transparent)}
+.vnone{flex:none;width:40px;height:40px;box-sizing:border-box;border-radius:13px;border:2px dashed var(--line)}
+
+.tabrow{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin:-6px 0 16px}
+.tabs{display:flex;gap:6px}
+.tabrow .pill{font-size:14px;padding:6px 14px}
+.tab{font:600 18px Fredoka,system-ui,sans-serif;color:var(--soft);background:transparent;border:none;border-radius:999px;padding:8px 18px;cursor:pointer;display:flex;align-items:center;gap:8px}
+.tab:hover{color:var(--ink)}
+.tab[aria-selected="true"]{background:var(--card);color:var(--ink);box-shadow:0 3px 0 var(--line)}
+.tab:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.tab .cnt{font:700 13px Nunito,system-ui,sans-serif;background:var(--coral-bg);color:var(--coral);border-radius:999px;padding:2px 9px}
 #msg .stale{color:var(--coral);font-weight:700}
-@media (max-width:600px){.dock{right:16px;bottom:16px}h1{font-size:34px}.card{grid-template-columns:1fr auto}.xs{grid-column:1/-1;grid-row:2;justify-content:flex-start}.vsq{width:44px;height:44px}.x,.ok{width:44px;height:44px;font-size:22px}.xmore{height:44px}}
+@media (max-width:600px){h1{font-size:34px}.card{grid-template-columns:1fr auto}.xs{grid-column:1/-1;grid-row:2;justify-content:flex-start}.xs>:first-child{margin-left:0}}
 </style>
 </head>
 <body>
@@ -141,14 +134,16 @@ pre.tall{max-height:65vh}
   <h1>Harness doctor</h1>
   <div class="bar">
     <select class="pill" id="scope" aria-label="Project"></select>
-    <button class="pill" id="unused" type="button" aria-pressed="true">Unused skills shown</button>
     <button class="pill" id="refresh" type="button" aria-label="Refresh">↻</button>
     <button class="pill go" id="doctor" type="button">Run harness doctor</button>
     <span id="msg" role="status"></span>
   </div>
+  <div class="tabrow" id="tabrow" hidden>
+    <div class="tabs" id="tabs" role="tablist"></div>
+    <button class="pill" id="unused" type="button" aria-pressed="true">Unused skills shown</button>
+  </div>
   <section class="cards" id="cards"></section>
 </main>
-<div id="dock" class="dock"></div>
 <div id="ctx" class="ctx" role="menu" hidden></div>
 <div id="tip" hidden></div>
 <script>
@@ -157,9 +152,12 @@ pre.tall{max-height:65vh}
   const ORDER = {"rules": 0, "output style": 1, "skill": 2};
   const KIND_CLASS = {"rules": "k-rules", "output style": "k-style", "skill": "k-skill"};  // blue, purple, yellow stripe
   const $ = id => document.getElementById(id);
-  let D = null, scope = "global", showUnused = true;
+  let D = null, scope = "global", showUnused = true, tab = "files";  // tab: "files" (a card per file) or "problems"
   const open = new Set(), showFile = new Set(), grown = new Set();
-  try { showUnused = localStorage.getItem("showUnused") !== "0"; scope = localStorage.getItem("scope") || "global"; } catch (e) {}
+  try {
+    showUnused = localStorage.getItem("showUnused") !== "0"; scope = localStorage.getItem("scope") || "global";
+    tab = localStorage.getItem("tab") === "problems" ? "problems" : "files";
+  } catch (e) {}
 
   const day = ms => new Date(ms).toLocaleDateString(undefined, {month: "short", day: "numeric"});
   function h(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
@@ -187,36 +185,32 @@ pre.tall{max-height:65vh}
     if (!cl.length) return {from: D.from, to: Infinity};
     return {from: Date.parse(cl[k].end), to: k + 1 < cl.length ? Date.parse(cl[k + 1].start) : Infinity};
   }
-  const touched = r => sessionsUsing(r, since(r)).filter(s => (D.triage || {})[s.id]);  // judged sessions: what Diagnose reads
 
   // ---------- what the doctor said ----------
-  // Per file: the triage verdict for each session, replaced by Diagnose's verdict where that version was diagnosed.
-  function diagFor(r, k) {
-    const c = r.clusters[k], d = (D.diagnoses || {})[r.id + "|" + (c ? c.end : "")];
-    return d && d.verdicts ? d : null;
-  }
-  const latestDiag = r => diagFor(r, r.clusters.length - 1);
+  // Per file: the triage verdict for each usage.
+  // One verdict per usage: CLAUDE.md and an output style are used once per session, a skill once per load
+  // ("use" 1, 2, … in load order). Returns [session id, verdict, use] for each usage.
+  const loadTimes = (r, s) => (s.skills || []).filter(u => u.name === r.name).map(u => Date.parse(u.t)).sort((a, b) => a - b);
+  const usageTime = (r, s, use) => r.kind === "skill" ? (loadTimes(r, s)[use - 1] || s.ms) : s.ms;
   function verdicts(r, k = r.clusters.length - 1) {
-    const out = new Map();
-    for (const [sid, files] of Object.entries(D.triage || {})) for (const f of files) if (f.file === r.id) out.set(sid, Object.assign({doctor: false}, f));
-    // A skill the triage saw loaded but blamed for nothing was a good use.
+    const out = new Map(), put = (sid, use, vd) => out.set(sid + "|" + use, [sid, vd, use]);
+    for (const [sid, files] of Object.entries(D.triage || {})) for (const f of files) if (f.file === r.id) put(sid, f.use || 1, Object.assign({doctor: false}, f));
+    // A skill load the triage saw but blamed for nothing was a good use.
     if (r.kind === "skill") for (const sid of Object.keys(D.triage || {})) {
       const s = D.byId.get(sid);
-      if (!out.has(sid) && s && (s.skills || []).some(u => u.name === r.name)) out.set(sid, {doctor: false, verdict: "worked", line: "Loaded, and no issue traced back to it."});
+      if (s) loadTimes(r, s).forEach((_, i) => { if (!out.has(sid + "|" + (i + 1))) put(sid, i + 1, {doctor: false, verdict: "worked", line: "Loaded, and no issue traced back to it."}); });
     }
-    const d = diagFor(r, k);
-    if (d) for (const vd of d.verdicts) out.set(vd.session, Object.assign({doctor: true}, vd));
-    return out;
+    return [...out.values()];
   }
   const issuesOf = vd => (vd.issues || []).length ? vd.issues : [{type: "issue", line: vd.line}];
   const verdictOf = (r, vd) => vd.verdict === "failed" ? "failed" : r.kind === "skill" || vd.verdict === "worked" ? "worked" : "none";
-  // Good (✓) and bad (✕) sessions for version k.
+  // Good (✓) and bad (✕) usages for version k.
   function counts(r, k) {
     const {from, to} = windowOf(r, k);
     let x = 0, ok = 0;
-    for (const [sid, vd] of verdicts(r, k)) {
-      const s = D.byId.get(sid), v = verdictOf(r, vd);
-      if (!s || !inScope(s) || s.ms < from || s.ms >= to) continue;
+    for (const [sid, vd, use] of verdicts(r, k)) {
+      const s = D.byId.get(sid), v = verdictOf(r, vd), ms = s && usageTime(r, s, use);
+      if (!s || !inScope(s) || ms < from || ms >= to) continue;
       if (v === "worked") ok++;
       if (v === "failed") x++;
     }
@@ -258,9 +252,8 @@ pre.tall{max-height:65vh}
   }
   addEventListener("scroll", () => { tip.hidden = true; }, {passive: true});
   // A mark: hover it for what happened and your words at that moment.
-  function tile(cls, glyph, spec, n) {
+  function tile(cls, glyph, spec) {
     const x = h("span", cls, glyph);
-    if (n > 1) x.append(h("span", "n", "×" + n));
     x.setAttribute("aria-label", spec.head);
     x.addEventListener("mouseenter", e => showTip(e, spec));
     x.addEventListener("mousemove", placeTip);
@@ -423,135 +416,69 @@ pre.tall{max-height:65vh}
     b.addEventListener("keydown", e => { if (e.key === "ArrowDown") { e.preventDefault(); go(-1); } else if (e.key === "ArrowUp") { e.preventDefault(); go(1); } });
     return b;
   }
-  async function post(path, body) {
-    return (await fetch(path, {method: "POST", headers: {"X-Harness-Doctor": "1", "Content-Type": "application/json"}, body: JSON.stringify(body)})).json();
-  }
-  // A floating button in the page's bottom-right corner (Apply or Revert): runs, then reloads the page's data.
-  function actButton(label, cls, busyLabel, run) {
-    const b = h("button", "act" + (cls ? " " + cls : ""), label);
-    b.type = "button";
-    b.addEventListener("click", async () => {
-      b.disabled = true; b.textContent = busyLabel;
-      let res;
-      try { res = await run(); } catch (err) { res = {ok: false, message: "Can't reach the server."}; }
-      await load(true);
-      if (!res.ok) $("msg").textContent = res.message;
-    });
-    return b;
-  }
-  // Apply: every picked edit, one file at a time. Revert: the open cards whose latest version came from Apply.
-  function paintDock() {
-    const dock = $("dock"), btns = [], n = [...picks.values()].reduce((a, s) => a + s.size, 0);
-    if (n) btns.push(actButton("Apply " + plural(n, "edit", "edits"), "", "Applying…", async () => {
-      for (const [id, set] of [...picks]) {
-        const r = D.rows.find(x => x.id === id), c = r && latestOf(r);
-        const texts = Object.fromEntries([...(edited.get(id) || new Map())].filter(([k]) => set.has(k)));
-        const res = await post("/api/apply", {row: id, version_t: c ? c.end : null, picks: [...set], texts});
-        if (!res.ok) return {ok: false, message: (r ? r.name + ": " : "") + res.message};
-        picks.delete(id); edited.delete(id);
-      }
-      return {ok: true};
-    }));
-    const back = D.rows.filter(r => open.has(r.id) && latestOf(r) && latestOf(r).applied);
-    if (back.length) btns.push(actButton(back.length > 1 ? "Revert " + back.length + " files" : "Revert " + back[0].name, "rev", "Reverting…", async () => {
-      for (const r of back) {
-        const res = await post("/api/revert", {row: r.id});
-        if (!res.ok) return {ok: false, message: r.name + ": " + res.message};
-      }
-      return {ok: true};
-    }));
-    dock.replaceChildren(...btns);
-  }
-  // A suggested edit: why, then the exact lines to cut (red) and add (green); "after" says where an addition goes.
-  // Its toggle picks it for Apply.
-  const picks = new Map();  // file -> indexes of the suggestions picked for Apply
-  const edited = new Map();  // file -> (index -> the green text as the user edited it)
-  function tryItem(t, r, i, pickable) {
-    const li = h("li");
-    if (typeof t === "string") { li.append(h("div", "tw", t)); return li; }
-    li.promptFn = () => suggestionPrompt(r, t, i);  // right-click: copy a prompt about this suggestion
-    const top = h("div", "top");
-    top.append(h("div", "tw", t.why || ""));
-    li.append(top);
-    if (pickable && (t.find || t.text)) {  // "Use" picks it for Apply
-      const on = (picks.get(r.id) || new Set()).has(i), use = h("button", "use", on ? "✓ Use" : "Use");
-      use.type = "button";
-      use.setAttribute("aria-pressed", String(on));
-      if (on) li.classList.add("picked");
-      use.addEventListener("click", e => {  // flips in place: no redraw, so the card stays still
-        e.stopPropagation();
-        const s = picks.get(r.id) || new Set(), now = !s.has(i);
-        now ? s.add(i) : s.delete(i);
-        s.size ? picks.set(r.id, s) : picks.delete(r.id);
-        use.setAttribute("aria-pressed", String(now)); use.textContent = now ? "✓ Use" : "Use";
-        li.classList.toggle("picked", now);
-        paintDock();
-      });
-      top.append(use);
-      // A click anywhere else on the suggestion flips Use too; not in the green box (that's for editing) or after selecting text.
-      li.classList.add("pick");
-      li.addEventListener("click", e => { if (!e.target.closest(".edit") && !String(getSelection())) use.click(); });
-    }
-    const block = (label, cls, text) => {
-      if (cls !== "add" || !pickable) { li.append(h("div", "lab", label), h("div", "code " + cls, text)); return; }
-      // The green text can be edited before Apply; Revert puts the suggested text back.
-      const wrap = h("div", "edit"), code = h("div", "code add"), back = h("button", "back", "↺ Revert"), mine = edited.get(r.id) || new Map();
-      code.textContent = mine.has(i) ? mine.get(i) : text;
-      try { code.contentEditable = "plaintext-only"; } catch (err) { code.contentEditable = "true"; }
-      code.spellcheck = false;
-      code.title = "Click to edit";
-      back.type = "button";
-      back.hidden = !mine.has(i);
-      code.addEventListener("input", () => {
-        const m = edited.get(r.id) || new Map(), now = code.innerText;
-        now === text ? m.delete(i) : m.set(i, now);
-        m.size ? edited.set(r.id, m) : edited.delete(r.id);
-        back.hidden = now === text;
-      });
-      back.addEventListener("click", e => {
-        e.stopPropagation();
-        code.textContent = text;
-        const m = edited.get(r.id);
-        if (m) { m.delete(i); if (!m.size) edited.delete(r.id); }
-        back.hidden = true;
-      });
-      wrap.append(code, back);
-      li.append(h("div", "lab", label), wrap);
-    };
-    if (t.find && t.text) { block("Replace", "cut", t.find); block("With", "add", t.text); }
-    else if (t.find) block("Cut", "cut", t.find);
-    else if (t.text) { if (t.after) block("Add after", "ctx", t.after); block(t.after ? "This" : "Add", "add", t.text); }
-    return li;
-  }
-  function card(r) {
-    const cl = r.clusters, k = vsel.has(r.id) ? vsel.get(r.id) : cl.length - 1, latest = k === cl.length - 1 || !cl.length;
-    const {from, to} = windowOf(r, k), dg = latest ? latestDiag(r) : null, seen = touched(r);
+  // Marks come only from the harness doctor (the triage, or Diagnose where it ran): one tile per session, newest first.
+  function versionMarks(r, k) {
+    const {from, to} = windowOf(r, k);
     const using = sessionsUsing(r, from, to), usedIds = new Set(using.map(s => s.id));
-    const c = h("div", "card " + KIND_CLASS[r.kind] + (using.length ? "" : " idle")), left = h("div");
-    c.promptFn = () => cardPrompt(r, k);  // right-click: copy a prompt about this card
-    // Marks come only from the harness doctor (the triage, or Diagnose where it ran): one tile per session, newest first.
-    const marks = [], judged = new Set();
-    let nBad = 0;
+    const marks = [], bads = [], judged = new Set();
+    let nBad = 0, nOk = 0;
     // Judged = the doctor has looked at the session (a file it wasn't involved in simply has no verdict).
-    for (const s of using) if ((D.triage || {})[s.id] || (dg && dg.sessions.includes(s.id))) judged.add(s.id);
-    for (const [sid, vd] of verdicts(r, k)) {
-      const s = D.byId.get(sid);
-      if (!s || !usedIds.has(sid)) continue;
+    for (const s of using) if ((D.triage || {})[s.id]) judged.add(s.id);
+    for (const [sid, vd, use] of verdicts(r, k)) {
+      const s = D.byId.get(sid), ms = s && usageTime(r, s, use);
+      if (!s || !usedIds.has(sid) || ms < from || ms >= to) continue;  // a skill's load must fall in this version too
       judged.add(sid);
       const v = verdictOf(r, vd);
       if (v === "worked") {
-        marks.push([s.ms, () => tile("ok", "✓", {head: "good use", ok: true, ms: s.ms, line: vd.line, you: vd.you})]);
+        nOk++;
+        marks.push([ms, () => tile("ok", "✓", {head: "good use", ok: true, ms, line: vd.line, you: vd.you})]);
       } else if (v === "failed") {
         nBad++;
         const items = issuesOf(vd).map(i => ({head: FR[i.type] || String(i.type || "issue").replace(/_/g, " "), line: i.line, you: i.you, marks: i.you_marks}));
-        marks.push([s.ms, () => {
-          const x = tile("x", "✕", Object.assign({ms: s.ms, items}, items.length > 1 ? {head: items.length + " issues"} : items[0]), items.length);
+        bads.push({sid, ms, items});
+        marks.push([ms, () => {
+          const x = tile("x", "✕", Object.assign({ms, items}, items.length > 1 ? {head: items.length + " issues"} : items[0]));  // one ✕ per usage; hover lists its issues
           x.promptFn = () => issuePrompt(r, sid, items);  // right-click: copy a prompt about this issue
           return x;
         }]);
       }
     }
-    const waiting = using.filter(s => !judged.has(s.id)).length;
+    marks.sort((a, b) => b[0] - a[0]);
+    bads.sort((a, b) => b.ms - a.ms);
+    return {using, judged, nBad, nOk, marks, bads};
+  }
+  // Every version's marks in one row, newest version first (left), each older one after a dotted line. The version
+  // in the square (the latest unless another is picked) is highlighted, and scrolled into view when picked. An empty newest version says so when older ones
+  // have marks. A row too long scrolls sideways.
+  function marksRow(r, k, vk) {
+    const n = Math.max(1, r.clusters.length), o = h("div", "xs"), segs = [];
+    o.dataset.key = r.id;
+    k = r.clusters.length ? k : 0;  // a file with no changes in the window has one version, index 0
+    for (let j = n - 1; j >= 0; j--) segs.push([j, j === k ? vk : versionMarks(r, j)]);
+    const any = segs.some(([, m]) => m.marks.length);
+    for (const [j, m] of segs) {
+      const newest = j === n - 1, picked = j === k;  // the version in the square, the latest one too
+      if (!m.marks.length && !(newest && any) && !(picked && !newest)) continue;  // a file with no marks at all shows nothing
+      const seg = h("div", "vseg" + (newest ? "" : " old") + (picked ? " sel" : ""));
+      if (picked) o.dataset.sel = String(j);
+      if (!m.marks.length) {  // an empty slot; hover says why
+        const e = h("span", "vnone");
+        e.setAttribute("aria-label", "no marks yet");
+        e.addEventListener("mouseenter", ev => showTip(ev, {head: "no marks yet", ms: Date.parse(r.clusters[j].end), line: "No session using v" + (j + 1) + " has been judged yet."}));
+        e.addEventListener("mousemove", placeTip);
+        e.addEventListener("mouseleave", () => { tip.hidden = true; });
+        seg.append(e);
+      }
+      for (const [, make] of m.marks) seg.append(make());
+      o.append(seg);
+    }
+    return {row: o, any};
+  }
+  function card(r) {
+    const cl = r.clusters, k = vsel.has(r.id) ? vsel.get(r.id) : cl.length - 1, latest = k === cl.length - 1 || !cl.length;
+    const vk = versionMarks(r, k), {using, judged, nBad} = vk, {row: o, any} = marksRow(r, k, vk);
+    const c = h("div", "card " + KIND_CLASS[r.kind] + (using.length || any ? "" : " idle")), left = h("div");
+    c.promptFn = () => cardPrompt(r);  // right-click: copy a prompt about this card
     // The name as a file (coworker.md, spawn-tab.md), and under it the full path; the stripe shows the kind.
     // The kind under the name; hovering it shows the full path over it, and a click copies the path.
     const sub = h("div", "sub"), kp = h("span", "kp", r.kind), pth = h("span", "path", r.path);
@@ -563,54 +490,24 @@ pre.tall{max-height:65vh}
     });
     kp.append(pth);
     sub.append(kp);
-    if (waiting) sub.append(" · " + waiting + " not judged");
     left.append(h("div", "nm", /\.md$/i.test(r.name) ? r.name : r.name + ".md"), sub);
-    const o = h("div", "xs");
-    for (const [, make] of marks.sort((a, b) => b[0] - a[0])) o.append(make());
     c.append(left, o, versionSquare(r, k));
     c.addEventListener("click", e => {
       if (e.target.closest(".more,.vdiff")) return;
       open.has(r.id) ? open.delete(r.id) : open.add(r.id); renderCards(false);
     });
-    if (open.has(r.id) && !latest) {  // an older version: its marks only, no diagnosis
-      const more = h("div", "more");
-      more.append(h("div", "meta", "This is v" + (k + 1) + ". Scroll the version square up to get back to the latest one."));
-      c.append(more);
-    }
-    if (open.has(r.id) && latest) {
-      const more = h("div", "more"), sec = h("div"), head = h("div", "fhead");
-      // "Run harness doctor" diagnoses every file with a new bad use: why it fails and the exact edit.
-      // With a diagnosis, its suggested edits are the whole answer (each one says why in its first line).
-      const edits = dg ? (dg.try || []) : [];
-      if (!edits.length) {
-        const title = dg ? (nBad ? "No edits suggested" : "Doing fine") : nBad ? "Not diagnosed yet" : judged.size ? "No bad uses since this version 🎉"
-          : using.length ? "Not judged yet" : "Not used since this version";
-        head.append(h("h3", null, title));
-        sec.append(head);
-      }
-      if (!dg && using.length && !judged.size) sec.append(h("div", "meta", "A session gets judged once it's been quiet for 30 minutes."));
-      const fresh = dg && !seen.some(s => !dg.sessions.includes(s.id));
-      if (nBad && !fresh) sec.append(h("div", "meta", dg ? "New sessions since this diagnosis: press Run harness doctor to update it." : "Press Run harness doctor to diagnose it."));
-      if (edits.length) {
-        const ul = h("ul", "try");
-        if (sec.childElementCount) ul.style.marginTop = "10px";
-        edits.forEach((t, i) => ul.append(tryItem(t, r, i, true)));
-        sec.append(ul);
-      }
-      const lc = latestOf(r);
-      if (lc && lc.applied) {  // this version came from Apply: what went in, and the way back
-        const ul = h("ul", "try"), th = h("h3", null, "Applied from Harness Doctor");
-        th.style.marginTop = "18px"; th.style.marginBottom = "8px";
-        lc.applied.items.forEach(t => ul.append(tryItem(t, r, -1, false)));
-        sec.append(th, ul);
-      }
+    if (open.has(r.id)) {  // the prompt to work out the fix in chat; the ✕ tiles already show each moment on hover
+      const more = h("div", "more"), sec = h("div"), vn = "v" + (cl.length ? k + 1 : 1);
+      sec.append(promptBox(() => cardPrompt(r)));
+      if (!latest) sec.append(h("div", "meta", "This is " + vn + ". Scroll the version square up to get back to the latest one."));
+      if (using.length && !judged.size) sec.append(h("div", "meta", "Not judged yet: press Run harness doctor."));
       more.append(sec);
       c.append(more);
     }
     if (diffOpen.has(r.id)) c.append(versionPanel(r, k));
     return c;
   }
-  // ---------- missing: an issue no file covers, repeated in 2+ sessions (a file that doesn't exist yet) ----------
+  // ---------- problems no file covers yet: one issue repeated in 2+ sessions (not a file, so not a card) ----------
   function gapGroups() {
     const by = new Map();
     for (const [sid, gaps] of Object.entries(D.gaps || {})) {
@@ -627,35 +524,94 @@ pre.tall{max-height:65vh}
       .sort((a, b) => b.items.length - a.items.length || b.items[b.items.length - 1].ms - a.items[a.items.length - 1].ms);
   }
   const topicName = t => t.replace(/_/g, " ");
-  function gapCard(g) {
-    const c = h("div", "card gap"), left = h("div"), o = h("div", "xs");
-    left.append(h("div", "nm", topicName(g.topic)), h("div", "sub", "missing · " + plural(g.items.length, "session", "sessions")));
-    for (const it of [...g.items].reverse()) {  // newest first
-      const x = tile("x", "✕", {head: FR[it.gap.type] || String(it.gap.type || "issue").replace(/_/g, " "), line: it.gap.line, you: it.gap.you, marks: it.gap.you_marks, ms: it.ms});
-      x.promptFn = () => gapIssuePrompt(it);
-      o.append(x);
+  // A card per problem no file covers ("overlong replies", 4 sessions, a ✕ each; hover one for that moment). A click
+  // opens the prompt to work out the fix in chat. Right-click a card or a ✕ to copy a prompt about it.
+  const gapOpen = new Set();
+  function gapCards(gaps) {
+    const cards = [];
+    for (const g of gaps) {
+      const c = h("div", "card k-gaps"), on = gapOpen.has(g.topic), left = h("div"), o = h("div", "xs");
+      o.dataset.key = "gap:" + g.topic;
+      left.append(h("div", "nm", topicName(g.topic)), h("div", "sub", plural(g.items.length, "session", "sessions")));
+      for (const it of [...g.items].reverse()) {  // newest first; hover one for that moment
+        const x = tile("x", "✕", {head: FR[it.gap.type] || String(it.gap.type || "issue").replace(/_/g, " "), line: it.gap.line, you: it.gap.you, marks: it.gap.you_marks, ms: it.ms});
+        x.promptFn = () => gapIssuePrompt(it);
+        o.append(x);
+      }
+      c.append(left, o);
+      c.addEventListener("click", e => {
+        if (e.target.closest(".more")) return;
+        on ? gapOpen.delete(g.topic) : gapOpen.add(g.topic); renderCards(false);
+      });
+      c.promptFn = () => gapPrompt(g);  // right-click: where a fix belongs
+      if (on) {
+        const more = h("div", "more");
+        more.append(promptBox(() => gapPrompt(g)));
+        c.append(more);
+      }
+      cards.push(c);
     }
-    c.promptFn = () => gapPrompt(g);
-    c.append(left, o);
-    return c;
+    return cards;
   }
-  // Tiles that don't fit become "+X ✕ +Y ✓" (older ones go first).
+  // An open card: the prompt to paste into Claude Code, and a button that copies it. Fixing a file or a problem
+  // takes a conversation, so the page only points at what went wrong.
+  function promptBox(make) {
+    const wrap = h("div"), head = h("div", "fhead"), b = h("button", "pill", "Copy prompt"), text = make();
+    b.type = "button";
+    b.addEventListener("click", async e => {
+      e.stopPropagation();
+      try { await navigator.clipboard.writeText(text); b.textContent = "Copied ✓"; } catch (err) { b.textContent = "Couldn't copy"; }
+      setTimeout(() => { b.textContent = "Copy prompt"; }, 1500);
+    });
+    head.append(h("h3", null, "Paste into Claude Code"), b);
+    wrap.append(head, h("div", "pbox", text));
+    return wrap;
+  }
+  // Rows of marks never fold: a row too long for the card scrolls sideways. Drag it with the mouse (or swipe) for
+  // older marks; a fade on an edge shows there's more that way. Each row keeps its place across redraws.
+  const scrollMem = new Map(), selMem = new Map();
+  function paintFade(box) {
+    const max = box.scrollWidth - box.clientWidth;
+    box.classList.toggle("scrolls", max > 1);
+    box.style.setProperty("--fl", box.scrollLeft > 1 ? "48px" : "0px");
+    box.style.setProperty("--fr", box.scrollLeft < max - 1 ? "48px" : "0px");
+  }
+  function wireRow(box) {
+    box.dataset.wired = "1";
+    box.addEventListener("scroll", () => {
+      if (box.dataset.key) scrollMem.set(box.dataset.key, box.scrollLeft);
+      paintFade(box);
+    }, {passive: true});
+    box.addEventListener("pointerdown", e => {
+      if (e.button !== 0 || e.pointerType !== "mouse" || box.scrollWidth <= box.clientWidth + 1) return;  // touch scrolls natively
+      const x0 = e.clientX, s0 = box.scrollLeft;
+      let moved = false;
+      const move = ev => {
+        const dx = ev.clientX - x0;
+        if (!moved && Math.abs(dx) > 4) { moved = true; box.classList.add("dragging"); tip.hidden = true; }
+        if (moved) box.scrollLeft = s0 - dx;
+      };
+      const up = () => {
+        removeEventListener("pointermove", move); removeEventListener("pointerup", up);
+        box.classList.remove("dragging");
+        if (!moved) return;
+        const eat = ev => { ev.stopPropagation(); ev.preventDefault(); };  // a drag isn't a click: the card stays as it is
+        addEventListener("click", eat, {capture: true, once: true});
+        setTimeout(() => removeEventListener("click", eat, true), 0);
+      };
+      addEventListener("pointermove", move); addEventListener("pointerup", up);
+    });
+  }
   function fitTiles() {
     for (const box of document.querySelectorAll(".xs")) {
-      const old = box.querySelector(".xmore");
-      if (old) old.remove();
-      const tiles = [...box.querySelectorAll(".x,.ok")];
-      tiles.forEach(t => { t.hidden = false; });
-      if (!tiles.length) continue;
-      const step = tiles[0].offsetWidth + 10, room = box.clientWidth - 8 + 10;
-      if (tiles.length * step <= room) continue;
-      const keep = Math.max(0, Math.floor((room - 150) / step));
-      let nx = 0, nok = 0;
-      for (const t of tiles.slice(keep)) { t.hidden = true; t.classList.contains("ok") ? nok++ : nx++; }
-      const more = h("span", "xmore");
-      if (nx) more.append(h("span", "mx", "+" + nx + " ✕"));
-      if (nok) more.append(h("span", "mok", "+" + nok + " ✓"));
-      box.append(more);
+      if (!box.dataset.wired) wireRow(box);
+      if (scrollMem.has(box.dataset.key)) box.scrollLeft = scrollMem.get(box.dataset.key);
+      const sel = box.querySelector(".vseg.sel");
+      if ((box.dataset.sel || "") !== (selMem.get(box.dataset.key) || "")) {  // a version just picked in the square: scroll to it
+        selMem.set(box.dataset.key, box.dataset.sel || "");
+        if (sel) box.scrollLeft += sel.getBoundingClientRect().left - box.getBoundingClientRect().left - 24;
+      }
+      paintFade(box);
     }
   }
   // A redraw makes new cards under the mouse, which replays the hover lift and looks like a shake.
@@ -670,20 +626,26 @@ pre.tall{max-height:65vh}
     paintStatus();
     // Nothing judged yet: the cards would all read "not judged", so show only what to do.
     if (!((D.pending || {})[scope] || {}).has_data) {
+      $("tabrow").hidden = true;
       const e = h("div", "empty", "No sessions judged yet. Press ");
       e.append(h("b", null, "Run harness doctor"), " to judge them.");
       box.append(e);
-      paintDock();
+      return;
+    }
+    const gaps = gapGroups();
+    paintTabs(gaps.length);
+    $("unused").hidden = tab === "problems";  // it only filters file cards
+    if (tab === "problems") {
+      const head = h("div", "group", "Problems no file covers yet");
+      head.promptFn = () => gapsPrompt(gaps);  // right-click the heading: all of them at once
+      box.append(head);
+      if (gaps.length) box.append(...gapCards(gaps));
+      else box.append(h("div", "quiet", "None right now. A problem shows here once it happens in 2 sessions and no file covers it."));
+      fitTiles();
       return;
     }
     const fails = r => counts(r, r.clusters.length - 1).x;
     const groups = scope === "global" ? [[null, globalRows()]] : [["Project: " + (D.scopes.find(x => x.key === scope) || {label: scope}).label, projectRows()], ["Global", globalRows()]];
-    const gaps = gapGroups();
-    if (gaps.length) {
-      box.append(h("div", "group", "Missing"));
-      for (const g of gaps) box.append(gapCard(g));
-      if (!groups[0][0]) groups[0][0] = "Global";
-    }
     let hidden = 0;
     for (const [title, all] of groups) {
       const list = all.filter(r => {
@@ -697,7 +659,26 @@ pre.tall{max-height:65vh}
     }
     if (hidden) box.append(h("div", "quiet", plural(hidden, "unused skill", "unused skills") + " hidden"));
     fitTiles();
-    paintDock();
+  }
+  // Files (a card per file) | Problems (issues no file covers), with the open problems counted on the tab.
+  function paintTabs(nGaps) {
+    const bar = $("tabs");
+    $("tabrow").hidden = false;
+    bar.replaceChildren();
+    for (const [key, label] of [["files", "Files"], ["problems", "Problems"]]) {
+      const b = h("button", "tab", label);
+      b.type = "button";
+      b.setAttribute("role", "tab");
+      b.setAttribute("aria-selected", String(tab === key));
+      if (key === "problems" && nGaps) b.append(h("span", "cnt", String(nGaps)));
+      b.addEventListener("click", () => {
+        if (tab === key) return;
+        tab = key;
+        try { localStorage.setItem("tab", tab); } catch (e) {}
+        renderCards();
+      });
+      bar.append(b);
+    }
   }
 
   // ---------- right-click: copy a prompt to ask Claude about what's under the mouse ----------
@@ -706,13 +687,13 @@ pre.tall{max-height:65vh}
   const ids = list => list.length ? list.join(", ") : "none";
   // Session ids of version k's good and bad uses, in view.
   function uses(r, k = r.clusters.length - 1) {
-    const {from, to} = windowOf(r, k), good = [], bad = [];
-    for (const [sid, vd] of verdicts(r, k)) {
-      const s = D.byId.get(sid), v = verdictOf(r, vd);
-      if (!s || !inScope(s) || s.ms < from || s.ms >= to) continue;
-      if (v === "worked") good.push(sid); else if (v === "failed") bad.push(sid);
+    const {from, to} = windowOf(r, k), good = new Set(), bad = new Set();
+    for (const [sid, vd, use] of verdicts(r, k)) {
+      const s = D.byId.get(sid), v = verdictOf(r, vd), ms = s && usageTime(r, s, use);
+      if (!s || !inScope(s) || ms < from || ms >= to) continue;
+      if (v === "worked") good.add(sid); else if (v === "failed") bad.add(sid);
     }
-    return {good, bad};
+    return {good: [...good], bad: [...bad]};
   }
   const versionOf = (r, k) => r.clusters.length ? "v" + (k + 1) + " of " + r.clusters.length + ", in force since " + when(Date.parse(r.clusters[k].end)) : "unchanged in the last 30 days";
   function pagePrompt() {
@@ -725,11 +706,29 @@ pre.tall{max-height:65vh}
     return ["Use the /harness-doctor:diagnose skill. These harness files have bad uses in " + where + " since their latest version:", ...lines, LOGS,
       "Read the bad sessions, find what keeps going wrong across the files, and propose one set of edits that fixes them all. Don't apply them."].join("\n");
   }
-  function cardPrompt(r, k) {
-    const u = uses(r, k);
-    return ["Use the /harness-doctor:diagnose skill on " + r.path + " (" + r.kind + ", " + versionOf(r, k) + ").",
-      "Good uses: " + ids(u.good) + ".", "Bad uses: " + ids(u.bad) + ".", LOGS,
-      u.bad.length ? "Say why it fails and what to change. Don't apply anything." : "Say whether it's doing its job and whether anything should change. Don't apply anything."].join("\n");
+  // A card's prompt checks the file as it is now against every bad use in view, older versions included: would the
+  // latest version have prevented each one? Bad uses on the latest version itself are still happening.
+  function cardPrompt(r) {
+    if (r.kind === "skill" && !sessionsUsing(r, D.from).length) {  // an unused skill: why doesn't it load?
+      const where = scope === "global" ? "any session" : "any session in " + (D.scopes.find(x => x.key === scope) || {label: scope}).label;
+      return ["Use the /harness-doctor:diagnose skill on " + r.path + ". This skill hasn't loaded in " + where + " in the last 30 days.",
+        "Find out why: read its name and description, then look through my recent sessions (~/.claude/projects/*/*.jsonl) for moments where it should have loaded.",
+        "Say whether it's needed at all. If it is, say why it didn't load (what I actually said, next to the words in its description) and how to change the description so it does. Don't apply anything."].join("\n");
+    }
+    const n = Math.max(1, r.clusters.length), vn = "v" + n, lines = [];
+    const since = r.clusters.length ? ", in force since " + when(Date.parse(r.clusters[n - 1].end)) : "";
+    for (let j = n - 1; j >= 0; j--) for (const b of versionMarks(r, j).bads) {
+      const said = b.items.find(it => it.you), what = b.items.map(it => it.line || it.head).join("; ");
+      lines.push("- v" + (j + 1) + ", " + when(b.ms) + ", session " + b.sid + ": " + what + (said ? ' (I said: "' + said.you + '")' : "") + (j === n - 1 ? " [still happening]" : ""));
+    }
+    if (!lines.length) {
+      const u = uses(r);
+      return ["Use the /harness-doctor:diagnose skill on " + r.path + " (" + r.kind + ", " + vn + since + "). It has no bad uses in the last 30 days.",
+        "Good uses: " + ids(u.good) + ".", LOGS, "Say whether it's doing its job and whether anything should change. Don't apply anything."].join("\n");
+    }
+    return ["Use the /harness-doctor:diagnose skill to check " + r.path + " (" + r.kind + ") as it is now (" + vn + since + ") against its past bad uses:", ...lines, LOGS,
+      "For each one, quote the line in " + vn + " that would have prevented it, or say none does.",
+      "Then suggest edits for the ones still open. Don't apply anything."].join("\n");
   }
   function issuePrompt(r, sid, items) {
     const s = D.byId.get(sid), out = ["In session " + sid + " (" + when(s.ms) + ", in " + s.cwd + "), " + r.path + " had " + (items.length > 1 ? "these issues:" : "this issue:")];
@@ -740,13 +739,13 @@ pre.tall{max-height:65vh}
     out.push("Read that session's log (~/.claude/projects/*/" + sid + ".jsonl) around that moment, then tell me what happened and which line of " + r.path + " caused it.");
     return out.join("\n");
   }
-  function suggestionPrompt(r, t, i) {
-    const mine = (edited.get(r.id) || new Map()).get(i), text = mine != null ? mine : t.text, u = uses(r), out = ["Harness doctor suggests this edit to " + r.path + ":"];
-    if (t.why) out.push("Why: " + t.why);
-    if (t.find && text) out.push("Replace:", t.find, "With:", text);
-    else if (t.find) out.push("Cut:", t.find);
-    else if (text) { if (t.after) out.push("Add after this line:", t.after); out.push("Add:", text); }
-    out.push("Is it right, and what could it break? Check it against the file and the sessions that used it: " + ids(u.good.concat(u.bad)) + ".", LOGS, "Don't apply it.");
+  function gapsPrompt(gaps) {
+    const out = ["Use the /harness-doctor:diagnose skill. These issues keep happening, and no CLAUDE.md, skill or output style covers them:"];
+    for (const g of gaps) {
+      out.push("- " + topicName(g.topic) + " (" + plural(g.items.length, "session", "sessions") + "):");
+      for (const it of g.items) out.push("  - " + when(it.ms) + ", session " + it.sid + ": " + it.gap.line + (it.gap.you ? ' I said: "' + it.gap.you + '"' : ""));
+    }
+    out.push(LOGS, "Read those moments. For each problem, say where a fix belongs: a new skill (a procedure for a certain moment), a new rule in CLAUDE.md (always on), or a hook (something that must happen automatically), and write its full text. Group problems that one fix would cover. Don't create anything.");
     return out.join("\n");
   }
   function gapPrompt(g) {
@@ -800,8 +799,11 @@ pre.tall{max-height:65vh}
   function paintStatus() {
     if (jobRunning || !D) return;
     const p = (D.pending || {})[scope] || {}, todo = [], m = $("msg");
-    if (p.judge) todo.push(plural(p.judge, "session", "sessions") + " to judge");
+    if (p.judge) todo.push(plural(p.judge, "finished session", "finished sessions") + " to judge");
+    if (p.ongoing) todo.push(plural(p.ongoing, "ongoing session", "ongoing sessions") + " to judge");
     if (p.diagnose) todo.push(plural(p.diagnose, "file", "files") + " to diagnose");
+    if (p.recheck) todo.push("problems to re-check against your files");
+    if (p.problems) todo.push(plural(p.problems, "problem", "problems") + " to work out a fix for");
     m.replaceChildren();
     if (!p.has_data) m.append(h("span", "stale", "No data yet"), " · press Run harness doctor");
     else if (todo.length) m.append(h("span", "stale", "Out of date"), " · " + todo.join(", "));
@@ -825,7 +827,7 @@ pre.tall{max-height:65vh}
     renderCards();
   }
   $("scope").addEventListener("change", e => {
-    scope = e.target.value; open.clear(); picks.clear(); edited.clear(); renderCards();
+    scope = e.target.value; open.clear(); renderCards();
     try { localStorage.setItem("scope", scope); } catch (err) {}  // the pick stays after a reload or restart
   });
   $("refresh").addEventListener("click", () => load(true));
