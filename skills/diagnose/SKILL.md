@@ -39,7 +39,10 @@ Where it didn't, judge from `you` alone: pushback, corrections and confusion ("n
 For each session, judge each file it touched with the steps above, but skip the diagnosis (every skill it loaded is `worked` or `failed`).
 For every verdict and every issue, quote in `you` the user's words for it (the request a worked file served, or the words where the issue showed), copied exactly from `you`, under 200 characters; mark 1–3 words that show an issue in `you_marks`.
 Leave out files that weren't involved.
-Answer with only this JSON: `{"sessions": [{"session": "<id>", "files": [{"file": "<id>", "verdict": "worked" | "failed", "line": "...", "you": "..." or null, "issues": [{"type": "<type>", "line": "...", "you": "..." or null, "you_marks": ["..."]}]}]}]}`
+Also list the session's `gaps`: issues that none of its `files` is about, so a new skill, rule or hook would be their home.
+Leave out one-off slips no instruction could prevent.
+Give each gap a `topic`, a short snake_case name for the problem (e.g. `unverified_visuals`); reuse a topic from `known_gaps` (topics found before, each with one line) when it's the same problem, so repeats group together.
+Answer with only this JSON: `{"sessions": [{"session": "<id>", "files": [{"file": "<id>", "verdict": "worked" | "failed", "line": "...", "you": "..." or null, "issues": [{"type": "<type>", "line": "...", "you": "..." or null, "you_marks": ["..."]}]}], "gaps": [{"topic": "<snake_case>", "type": "<type>", "line": "...", "you": "..." or null, "you_marks": ["..."]}]}]}`
 
 ## Output
 - **Page:** only this JSON, no other text:

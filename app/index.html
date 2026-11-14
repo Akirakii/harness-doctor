@@ -35,6 +35,9 @@ h1{font:700 42px/1.05 Fredoka,system-ui,sans-serif;margin:0;letter-spacing:-.01e
 .card:hover{transform:translateY(-2px)}
 .card.idle{box-shadow:none;background:transparent;outline:2px dashed var(--line);outline-offset:-2px}
 .card.idle>:not(.more),.card.idle::before{opacity:.55}
+.card.gap{cursor:default;box-shadow:none;background:transparent;outline:2px dashed color-mix(in srgb,var(--coral) 45%,var(--line));outline-offset:-2px}
+.card.gap::before{display:none}
+.card.gap:hover{transform:none}
 .nm{font:600 23px/1.2 Fredoka,system-ui,sans-serif;overflow-wrap:anywhere}
 .sub{color:var(--soft);font-size:14px;overflow-wrap:anywhere}
 .sub .kp{position:relative;cursor:copy}
@@ -127,6 +130,8 @@ pre.tall{max-height:65vh}
 .md .fm{font-size:13px;color:var(--soft);border-bottom:2px dashed var(--line);padding-bottom:8px;margin-bottom:6px}
 .md .fm b{color:var(--ink)}
 .quiet{color:var(--soft);font-size:15px;margin:6px 4px}
+.empty{color:var(--soft);font-size:18px;text-align:center;padding:56px 16px;border:2px dashed var(--line);border-radius:18px}
+.empty b{color:var(--ink)}
 #msg .stale{color:var(--coral);font-weight:700}
 @media (max-width:600px){.dock{right:16px;bottom:16px}h1{font-size:34px}.card{grid-template-columns:1fr auto}.xs{grid-column:1/-1;grid-row:2;justify-content:flex-start}.vsq{width:44px;height:44px}.x,.ok{width:44px;height:44px;font-size:22px}.xmore{height:44px}}
 </style>
@@ -605,6 +610,35 @@ pre.tall{max-height:65vh}
     if (diffOpen.has(r.id)) c.append(versionPanel(r, k));
     return c;
   }
+  // ---------- missing: an issue no file covers, repeated in 2+ sessions (a file that doesn't exist yet) ----------
+  function gapGroups() {
+    const by = new Map();
+    for (const [sid, gaps] of Object.entries(D.gaps || {})) {
+      const s = D.byId.get(sid);
+      if (!s || !inScope(s) || commandOnly(s)) continue;
+      for (const g of gaps) {
+        const k = String(g.topic);
+        if (!by.has(k)) by.set(k, new Map());
+        if (!by.get(k).has(sid)) by.get(k).set(sid, {sid, ms: s.ms, gap: g});  // one per session
+      }
+    }
+    return [...by].map(([topic, m]) => ({topic, items: [...m.values()].sort((a, b) => a.ms - b.ms)}))
+      .filter(g => g.items.length >= 2)
+      .sort((a, b) => b.items.length - a.items.length || b.items[b.items.length - 1].ms - a.items[a.items.length - 1].ms);
+  }
+  const topicName = t => t.replace(/_/g, " ");
+  function gapCard(g) {
+    const c = h("div", "card gap"), left = h("div"), o = h("div", "xs");
+    left.append(h("div", "nm", topicName(g.topic)), h("div", "sub", "missing · " + plural(g.items.length, "session", "sessions")));
+    for (const it of [...g.items].reverse()) {  // newest first
+      const x = tile("x", "✕", {head: FR[it.gap.type] || String(it.gap.type || "issue").replace(/_/g, " "), line: it.gap.line, you: it.gap.you, marks: it.gap.you_marks, ms: it.ms});
+      x.promptFn = () => gapIssuePrompt(it);
+      o.append(x);
+    }
+    c.promptFn = () => gapPrompt(g);
+    c.append(left, o);
+    return c;
+  }
   // Tiles that don't fit become "+X ✕ +Y ✓" (older ones go first).
   function fitTiles() {
     for (const box of document.querySelectorAll(".xs")) {
@@ -634,8 +668,22 @@ pre.tall{max-height:65vh}
     const box = $("cards");
     box.replaceChildren();
     paintStatus();
+    // Nothing judged yet: the cards would all read "not judged", so show only what to do.
+    if (!((D.pending || {})[scope] || {}).has_data) {
+      const e = h("div", "empty", "No sessions judged yet. Press ");
+      e.append(h("b", null, "Run harness doctor"), " to judge them.");
+      box.append(e);
+      paintDock();
+      return;
+    }
     const fails = r => counts(r, r.clusters.length - 1).x;
     const groups = scope === "global" ? [[null, globalRows()]] : [["Project: " + (D.scopes.find(x => x.key === scope) || {label: scope}).label, projectRows()], ["Global", globalRows()]];
+    const gaps = gapGroups();
+    if (gaps.length) {
+      box.append(h("div", "group", "Missing"));
+      for (const g of gaps) box.append(gapCard(g));
+      if (!groups[0][0]) groups[0][0] = "Global";
+    }
     let hidden = 0;
     for (const [title, all] of groups) {
       const list = all.filter(r => {
@@ -699,6 +747,21 @@ pre.tall{max-height:65vh}
     else if (t.find) out.push("Cut:", t.find);
     else if (text) { if (t.after) out.push("Add after this line:", t.after); out.push("Add:", text); }
     out.push("Is it right, and what could it break? Check it against the file and the sessions that used it: " + ids(u.good.concat(u.bad)) + ".", LOGS, "Don't apply it.");
+    return out.join("\n");
+  }
+  function gapPrompt(g) {
+    const out = ["Use the /harness-doctor:diagnose skill. This issue keeps happening, and no CLAUDE.md, skill or output style covers it: " + topicName(g.topic) + " (" + plural(g.items.length, "session", "sessions") + ")."];
+    for (const it of g.items) {
+      out.push("- " + when(it.ms) + ", session " + it.sid + ": " + it.gap.line);
+      if (it.gap.you) out.push('  I said: "' + it.gap.you + '"');
+    }
+    out.push(LOGS, "Read those moments and say where a fix belongs: a new skill (a procedure for a certain moment), a new rule in CLAUDE.md (always on), or a hook (something that must happen automatically). Write its full text. Don't create it.");
+    return out.join("\n");
+  }
+  function gapIssuePrompt(it) {
+    const s = D.byId.get(it.sid), out = ["In session " + it.sid + " (" + when(it.ms) + ", in " + s.cwd + "), this issue happened, and no harness file covers it: " + it.gap.line];
+    if (it.gap.you) out.push('I said: "' + it.gap.you + '"');
+    out.push("Read that session's log (~/.claude/projects/*/" + it.sid + ".jsonl) around that moment, then tell me what happened and what instruction would have prevented it.");
     return out.join("\n");
   }
   const ctx = $("ctx");

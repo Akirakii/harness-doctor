@@ -492,6 +492,7 @@ def build():
             "to": int(now.timestamp() * 1000),
             "scopes": scopes, "sessions": sessions, "rows": rows, "diagnoses": load_diagnoses(),
             "triage": {k: v["files"] for k, v in load_triage()["sessions"].items()},
+            "gaps": {k: v["gaps"] for k, v in load_triage()["sessions"].items() if v.get("gaps")},
             "pending": {sc["key"]: pending({"rows": rows, "sessions": sessions}, sc["key"]) for sc in scopes},
             "last_judged": max((v["at"] for v in load_triage()["sessions"].values()), default=None)}
 
@@ -732,15 +733,25 @@ def run_triage(d, todo):
             files.setdefault(i, {"id": i, "name": rows[i]["name"], "kind": rows[i]["kind"], "about": about(rows[i])})
         items.append({"session": s["id"], "date": s["t"][:10], "issues": s.get("friction", {}), "note": s.get("detail", ""),
                       "summary": s.get("summary", ""), "outcome": s.get("outcome", ""), "files": ids, "you": your_words(s["id"])})
-    doc = {"files": list(files.values()), "sessions": items}
+    doc = {"files": list(files.values()), "known_gaps": known_gaps(), "sessions": items}
     prompt = ("Act as the harness-doctor skill below, in triage mode: answer with the JSON only.\n\n" + skill_body() +
               "\n\n## The input\n" + json.dumps(doc, ensure_ascii=False))
     res = ask_claude(prompt, "Triage the sessions in the input, following the instructions in it.", "sonnet") or {}
-    out = {s["id"]: {"at": now_iso(), "v": TRIAGE_V, "files": []} for s in todo}  # judged, even when no file was involved
+    out = {s["id"]: {"at": now_iso(), "v": TRIAGE_V, "files": [], "gaps": []} for s in todo}  # judged, even when nothing was found
     for x in res.get("sessions", []):
         if isinstance(x, dict) and x.get("session") in out:
             out[x["session"]]["files"] = [f for f in x.get("files", []) if isinstance(f, dict) and f.get("file") in files]
+            out[x["session"]]["gaps"] = [g for g in x.get("gaps", []) if isinstance(g, dict) and g.get("topic") and g.get("line")]
     return out
+
+
+def known_gaps(cap=60):
+    """Gap topics found so far (the latest line for each), so the triage reuses a topic for the same problem."""
+    seen = {}
+    for v in sorted(load_triage()["sessions"].values(), key=lambda v: v.get("at", "")):
+        for g in v.get("gaps", []):
+            seen[g["topic"]] = g["line"]
+    return [{"topic": k, "line": v} for k, v in list(seen.items())[-cap:]]
 
 
 def in_scope(s, scope):
@@ -782,12 +793,13 @@ def pending(d, scope="global"):
 
 
 def needs_judging(s, d, scope, t, quiet=None):
-    """A finished session in scope, under a file's last two versions, with a few messages, not judged yet."""
+    """A finished session in scope with a few messages, not judged yet, or judged before gaps were checked.
+    Every session counts, not only ones that used a file: an issue no file covers is a gap."""
     quiet = quiet or iso_ago(minutes=30)  # skip sessions that may still be going
-    if s["id"] in t["sessions"] or s["n"] < 3 or s["end"] >= quiet or not in_scope(s, scope):
+    done = t["sessions"].get(s["id"])
+    if (done and "gaps" in done) or s["n"] < 3 or s["end"] >= quiet or not in_scope(s, scope):
         return False
-    ids = set(touched_files(s, d["rows"]))
-    return any(s["t"] >= window_start(r) for r in d["rows"] if r["id"] in ids)
+    return True
 
 
 def doctor_job(scope="global"):
@@ -799,7 +811,11 @@ def doctor_job(scope="global"):
         todo = [s for s in d["sessions"] if needs_judging(s, d, scope, t)]
         for i in range(0, len(todo), 15):
             JOB.update(message=f"Judging sessions {i + 1}–{min(i + 15, len(todo))} of {len(todo)}…", pct=round(60 * i / len(todo)))
-            t["sessions"].update(run_triage(d, todo[i:i + 15]))
+            for sid, v in run_triage(d, todo[i:i + 15]).items():
+                old = t["sessions"].get(sid)
+                if old and old.get("v") == TRIAGE_V:
+                    v["files"] = old["files"]  # judged before gaps existed: keep its verdicts, add the gaps
+                t["sessions"][sid] = v
             save_json(data_path("triage.json"), t)
         save_json(data_path("triage.json"), t)
         # Then Diagnose (Opus) each file with a bad use it hasn't diagnosed yet, on its latest version.

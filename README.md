@@ -12,6 +12,7 @@ You write CLAUDE.md files, skills and an output style, then keep tweaking them. 
 - **Run harness doctor:** judges the sessions it hasn't seen yet, then diagnoses each file with new bad uses and suggests edits, each with a line on why, shown as lines to cut and lines to add.
 - **Apply:** toggle the suggested edits you want, then press Apply in the card's corner to write them into the file. It shows up as a new version, so later sessions show whether it helped. Revert puts the old text back while the file is still as Apply left it.
 - **Right-click to ask Claude:** right-click the page, a card, a ✕ or a suggestion and pick Copy prompt. It copies a prompt to paste into Claude Code, naming the files and sessions so Claude can read the logs itself.
+- **Missing cards:** an issue that no file covers but keeps coming back (2 or more sessions) gets a dashed card for a file that doesn't exist yet. Right-click it to copy a prompt that asks Claude where the fix belongs: a new skill, a CLAUDE.md rule or a hook.
 - **Project picker:** look at one project's files and sessions, or Global.
 
 ## Install
@@ -40,7 +41,7 @@ Needs Python 3.10 or later and the `claude` command on your PATH. There's nothin
 
 It only calls Claude when you press **Run harness doctor**, using your own Claude Code login (`claude -p`):
 
-- **Judging:** one Sonnet run per 15 new sessions. It reads your messages, each with the end of the Claude message you were answering.
+- **Judging:** one Sonnet run per 15 new sessions. Every session with a few messages gets judged once, since an issue no file covers counts too. It reads your messages, each with the end of the Claude message you were answering.
 - **Diagnosing:** one Opus run, at high effort, per file that has a new bad use. It reads the file, its last 3 versions, and the messages around each issue.
 
 Each session is judged once, and each file version is diagnosed once, unless new sessions come in.
