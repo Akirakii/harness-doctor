@@ -7,8 +7,6 @@ index) gets one more rule first, its loading line.
 import glob
 import os
 import re
-import subprocess
-import time
 
 import reader as rd
 
@@ -78,18 +76,19 @@ def description(text):
     return m.group(1).strip() if m else ""
 
 
-def indexed_items(know=None):
+def indexed_items(know=None, text_of=None):
     """Everything an index line of the domain knowledge points at, a file or a folder:
-    [{"path", "display", "kind": "note" | "folder" | "project", "scope", "domain", "when"}].
+    [{"path", "display", "kind": "note" | "folder" | "project", "scope", "domain", "when", "index": the index file}].
     Scope: "" (everything), "Shared", "Every project", or a project's name. A heading that names a folder
-    (`game-patterns/`) sets where the rows under it live."""
+    (`game-patterns/`) sets where the rows under it live. text_of(index file) gives an index's text at another
+    time than now (None: it wasn't there)."""
     know = know or KNOW
     out, seen = [], set()
     for idx in sorted(glob.glob(os.path.join(know, "**", "INDEX.md"), recursive=True)):
         folder = os.path.dirname(idx)
         rel = os.path.relpath(folder, know)
         base = folder
-        for line in (rd.read(idx) or "").splitlines():
+        for line in ((text_of or rd.read)(idx) or "").splitlines():
             h = HEAD.match(line)
             if h:
                 sub = [t for t in re.findall(r"`([^`]+)`", h.group(2)) if t.endswith("/") and os.path.isdir(os.path.join(folder, t))]
@@ -116,17 +115,16 @@ def indexed_items(know=None):
                 scope = rel.split(os.sep)[1] if rel.startswith("projects" + os.sep) else rel
             kind = "project" if isdir and rel == "projects" else "folder" if isdir else "note"
             out.append({"path": path, "display": os.path.basename(path) + ("/" if isdir else ""), "kind": kind, "scope": scope,
-                        "domain": cells[1] if rel == "." and len(cells) == 4 else "", "when": cells[-1]})
+                        "domain": cells[1] if rel == "." and len(cells) == 4 else "", "when": cells[-1], "index": idx})
     return out
 
 
-def born(path):
-    """When a file or folder was made, as an ISO time ("" when the disk doesn't say). A move keeps it; a copy resets it."""
-    try:
-        t = int(subprocess.run(["stat", "-c", "%W", path], capture_output=True, text=True).stdout.strip() or 0)
-    except (OSError, ValueError):
-        t = 0
-    return time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(t)) if t > 0 else ""
+def when_in(index, text, path, know=None):
+    """The "read when" an index's text gives for one note or folder, None when that text doesn't list it."""
+    return next((it["when"] for it in indexed_items(know, lambda idx: text if idx == index else None) if it["path"] == path), None)
+
+
+born = rd.born
 
 
 def project_dirs(sc):
@@ -142,7 +140,7 @@ def catalog(sc, s=None):
          "rules": [{"id", "part": "load" | "body", "group", "title", "text"}]}]"""
     files = []
 
-    def add(path, name, kind, scope, text, load=None, load_group=None, display=None, label=None, isdir=False):
+    def add(path, name, kind, scope, text, load=None, load_group=None, display=None, label=None, isdir=False, index=None):
         fid = slug(kind + "-" + (scope or "") + "-" + name)
         rules = []
         if load is not None:
@@ -155,12 +153,12 @@ def catalog(sc, s=None):
             seen.add(rid)
             rules.append({"id": rid, "part": "body", "group": r["group"] or ("What it says" if load is not None else ""), "title": r["title"], "text": r["text"]})
         files.append({"id": fid, "name": name, "display": display or (name if name.endswith(".md") else name + ".md"), "label": label or kind, "kind": kind,
-                      "scope": scope, "path": path.replace(rd.HOME, "~", 1), "trigger": load is not None, "isdir": isdir, "rules": rules})
+                      "scope": scope, "path": path.replace(rd.HOME, "~", 1), "trigger": load is not None, "isdir": isdir, "index": index, "rules": rules})
 
     def then(path):  # the file's text when the session started, where the logs can tell; else today's
         row = rd.row(sc, path)
-        if s and row and row.get("created") and row["created"] > s["t"]:
-            return None  # written after this session
+        if s and rd.since(row, born(path)) > s["t"]:
+            return None  # written after this session started, or its text back then isn't known
         return rd.version_at(row, s["t"])[1] if (row and s) else rd.read(path)
 
     def own_files(folder, scope):  # the CLAUDE.md, output styles and skills of ~/.claude or of one project
@@ -182,7 +180,7 @@ def catalog(sc, s=None):
     for name, folder in sorted(project_dirs(sc).items()):
         if os.path.isdir(folder) and (s is None or s["cwd"] == folder or s["cwd"].startswith(folder + "/")):
             own_files(folder, name)
-    for it in indexed_items():
+    for it in indexed_items(text_of=then if s else None):  # a "read when" line is judged as its index had it back then
         if s and born(it["path"]) > s["t"]:
             continue  # made after this session, so the session can't be judged against it
         isdir = it["kind"] != "note"
@@ -190,7 +188,7 @@ def catalog(sc, s=None):
         short = bool(text) and len(text) <= SHORT and it["path"].endswith(".md")  # only a short note is cut into facts
         label = "domain knowledge" + (" · " + it["domain"] if it["domain"] not in ("", "everything") else "")
         add(it["path"], re.sub(r"\.md$", "", it["display"].rstrip("/")) + ("-dir" if isdir else ""), "note", it["scope"], text if short else "",
-            load="Read when: " + it["when"], load_group="When it's read", display=it["display"], label=label, isdir=isdir)
+            load="Read when: " + it["when"], load_group="When it's read", display=it["display"], label=label, isdir=isdir, index=it["index"])
     return files
 
 

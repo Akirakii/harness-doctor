@@ -55,8 +55,33 @@ def versions_of(sc, f):
         out.append({"t": "", "when": "", "base": True, "diff": None, "text": row["base"] if (row and cl) else rd.read(os.path.expanduser(f["path"]))})
     for c in cl:
         out.append({"t": c["end"], "when": day(c["end"]), "base": False, "diff": c["diff"], "text": c["text"]})
+    out = sorted(out + load_changes(sc, f), key=lambda v: v["t"])
+    load = next((v["was"] for v in out if "was" in v), f["rules"][0]["text"] if f.get("index") else None)
     for i, v in enumerate(out, 1):
-        v["v"] = i
+        load = v.get("load", load)
+        v.update(v=i, load=load)
+        v.pop("was", None)
+    return out
+
+
+def load_changes(sc, f):
+    """For a note or folder of the domain knowledge: one version per change of its "read when" line, which is written
+    in an index and not in the file. The first one is the line being added when the index's text before it lacks it.
+    -> [{"t", "when", "base": False, "diff", "text": None (the file's own text didn't change), "load", "was"}]"""
+    row = rd.row(sc, f["index"]) if f.get("index") else None
+    if not row:
+        return []
+    path, line = os.path.expanduser(f["path"]), lambda w: None if w is None else "Read when: " + w
+    out, prev = [], rl.when_in(f["index"], row["base"], path) if row["base"] is not None else None
+    known = row["base"] is not None
+    for c in row["clusters"]:
+        if c["text"] is None:
+            continue
+        cur = rl.when_in(f["index"], c["text"], path)
+        if cur != prev and (known or row.get("created") == c["start"]):  # with the text before unknown, it's no change
+            out.append({"t": c["end"], "when": day(c["end"]), "base": False, "text": None, "load": line(cur), "was": line(prev),
+                        "diff": "\n".join(x for x in ("-" + (line(prev) or ""), "+" + (line(cur) or "")) if len(x) > 1)})
+        prev, known = cur, True
     return out
 
 
@@ -88,7 +113,9 @@ def rule_epochs(f):
     for i in range(len(texts) - 2, -1, -1):  # a version whose text couldn't be rebuilt counts as unchanged: from the next one,
         texts[i] = texts[i] if texts[i] is not None else texts[i + 1]
     for i in range(len(texts)):  # or, with nothing known after it, from the one before
-        texts[i] = texts[i] if texts[i] is not None else (texts[i - 1] if i else {})
+        texts[i] = dict(texts[i] if texts[i] is not None else (texts[i - 1] if i else {}))
+        if f.get("index"):  # a note's loading line is its index's, as it was at this version (None: not listed yet)
+            texts[i][f["rules"][0]["id"]] = f["versions"][i].get("load", f["rules"][0]["text"])
     of, spans = {}, {}
     for r in f["rules"]:
         e, of[r["id"]], spans[r["id"]] = 1, [], [{"e": 1, "when": f["versions"][0]["when"]}]
@@ -127,6 +154,9 @@ def page_data(sc, st):
     epoch_of = {}
     for f in files:
         f["versions"] = versions_of(sc, f)
+        path = os.path.expanduser(f["path"])  # a session from before the file, or before its index, has no say on it
+        f["since"] = max(rd.born(path) if f["isdir"] else rd.since(rd.row(sc, path), rd.born(path)),
+                         rd.since(rd.row(sc, f["index"]), rd.born(f["index"])) if f.get("index") else "")
         of, spans = rule_epochs(f)
         epoch_of.update(of)
         for r in f["rules"]:
@@ -139,8 +169,8 @@ def page_data(sc, st):
         project = os.path.basename(s["cwd"].rstrip("/"))
         for m in e.get("marks", []):
             f = rule_file.get(m["rule"])
-            if not f or m["verdict"] == "unknown":
-                continue  # the rule was since renamed or removed, or the judge couldn't tell
+            if not f or m["verdict"] == "unknown" or s["t"] < f["since"]:
+                continue  # the rule was since renamed or removed, the judge couldn't tell, or the session is older than the file
             n += 1
             v = version_at(f["versions"], s["t"])
             moments.append({"id": f"m{n}", "sid": sid, "file": f["id"], "rule": m["rule"], "v": v, "e": epoch_of[m["rule"]][v - 1],

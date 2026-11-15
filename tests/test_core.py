@@ -12,6 +12,8 @@ import judge as jd  # noqa: E402
 import reader as hd  # noqa: E402  the tests below were written against the reader when it lived in harness_doctor.py
 import rules as rl  # noqa: E402
 
+rd_read = hd.read
+
 
 class RowOf(unittest.TestCase):
     def test_global_files(self):
@@ -171,6 +173,40 @@ class IndexedItems(unittest.TestCase):
         self.assertEqual((items["moon/"]["scope"], items["moon/"]["kind"]), ("moon", "project"))
         self.assertEqual((items["redo-race/"]["scope"], items["redo-race/"]["kind"]), ("moon", "folder"))
         self.assertEqual((items["design.md"]["scope"], items["design.md"]["kind"]), ("moon", "note"))
+
+
+    def test_the_read_when_an_older_index_text_gave(self):
+        idx, note = os.path.join(self.k, "INDEX.md"), os.path.join(self.k, "note.md")
+        self.assertEqual(rl.when_in(idx, "| `note.md` | games | a note | old words |\n", note, self.k), "old words")
+        self.assertIsNone(rl.when_in(idx, "| `other.md` | games | a note | x |\n", note, self.k))  # not listed back then
+
+    def test_a_changed_read_when_is_a_new_version_of_the_note(self):
+        idx, note = os.path.join(self.k, "INDEX.md"), os.path.join(self.k, "note.md")
+        old = "| `note.md` | games | a note | old words |\n"
+        f = {"id": "n", "path": note, "isdir": False, "index": idx, "kind": "note", "rules": [{"id": "n#load", "part": "load", "text": "Read when: doing games"}]}
+        row = {"created": None, "base": "nothing listed\n", "clusters": [
+            {"start": "2026-11-02T10:00", "end": "2026-11-02T10:00", "text": old, "diff": ""},
+            {"start": "2026-11-03T10:00", "end": "2026-11-03T10:00", "text": old + "more\n", "diff": ""},  # another row changed
+            {"start": "2026-11-05T10:00", "end": "2026-11-05T10:00", "text": rd_read(idx), "diff": ""}]}
+        sc, know, rl.KNOW = {"rows": {idx: row, note: None}}, rl.KNOW, self.k
+        try:
+            f["versions"] = doc.versions_of(sc, f)
+        finally:
+            rl.KNOW = know
+        self.assertEqual([v["load"] for v in f["versions"]], [None, "Read when: old words", "Read when: doing games"])
+        of, spans = doc.rule_epochs(f)
+        self.assertEqual(of["n#load"], [1, 2, 3])  # a mark from before the line was written isn't on today's wording
+
+
+class KnownSince(unittest.TestCase):
+    def test_since(self):
+        edit = {"t": "2026-11-10T10:00:00.000Z", "kind": "edit"}
+        self.assertEqual(hd.since({"created": "2026-11-09T00:00:00.000Z", "versions": [edit]}, "2026-11-12T00:00:00"), "2026-11-09T00:00:00.000Z")
+        self.assertEqual(hd.since({"versions": []}, "2026-11-12T00:00:00"), "2026-11-12T00:00:00")  # made outside the logs
+        self.assertEqual(hd.since({"versions": [{"t": "2026-11-12T00:00:00.100Z", "kind": "outside"}]}, "2026-11-12T00:00:00"), "2026-11-12T00:00:00")
+        self.assertEqual(hd.since({"versions": [edit]}, "2026-11-08T00:00:00"), "2026-11-08T00:00:00")  # made by a script, edited later
+        self.assertEqual(hd.since({"versions": [edit]}, "2026-11-10T10:00:01"), "")  # the disk only knows the last save
+        self.assertEqual(hd.since(None, ""), "")
 
 
 class WasRead(unittest.TestCase):

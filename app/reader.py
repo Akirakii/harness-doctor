@@ -11,6 +11,8 @@ import json
 import os
 import re
 import shlex
+import subprocess
+import time
 from collections import defaultdict
 
 HOME = os.path.expanduser("~")
@@ -43,8 +45,8 @@ def row_of(path):
     g = CLAUDE + "/"
     if path == g + "CLAUDE.md":
         return "global", "rules", "CLAUDE.md"
-    if path.startswith(g + "domain-knowledge/") and path.endswith(".md") and not path.endswith("/INDEX.md"):
-        return "global", "note", path[len(g) + len("domain-knowledge/"):]
+    if path.startswith(g + "domain-knowledge/") and path.endswith(".md"):  # an index is followed for its "read when" lines
+        return "global", "index" if path.endswith("/INDEX.md") else "note", path[len(g) + len("domain-knowledge/"):]
     m = re.fullmatch(re.escape(g) + r"skills/([^/]+)/SKILL\.md", path)
     if m:
         return "global", "skill", m.group(1)
@@ -405,6 +407,30 @@ def version_at(row, t):
         if v["t"] <= t:
             k, text = i, v["text"]
     return k, (text if text is not None else read(row["id"]))
+
+
+def born(path):
+    """When a file or folder was made, as an ISO time ("" when the disk doesn't say). A move keeps it; a copy, or an
+    edit that saves by replacing the file, resets it."""
+    try:
+        t = int(subprocess.run(["stat", "-c", "%W", path], capture_output=True, text=True).stdout.strip() or 0)
+    except (OSError, ValueError):
+        t = 0
+    return time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(t)) if t > 0 else ""
+
+
+def since(row, birth):
+    """From when a file's text is known, as an ISO time: a session older than this can't be judged against the file.
+    "" when the file was there before everything the logs show. `birth` is born(path).
+    The logs saw it made: then. No change in the logs, or the disk says it was made clearly before the first one
+    (a script made it, a later session edited it): the disk's time. Else the disk's time is only the last save."""
+    if row and row.get("created"):
+        return row["created"]
+    first = next((v["t"] for v in (row or {}).get("versions", []) if v["kind"] != "outside"), None)
+    if not birth or first is None:
+        return birth
+    gap = datetime.datetime.fromisoformat(first[:19]) - datetime.datetime.fromisoformat(birth)
+    return birth if gap.total_seconds() > 2 else ""
 
 
 def live_sessions():
