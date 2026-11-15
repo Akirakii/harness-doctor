@@ -3,3 +3,5 @@ __pycache__/
 *.tmp
 # results, if you run it with --data inside the repo
 data/
+# mock pages: they hold the author's own rule names and, in real.html, real session quotes
+mock/
