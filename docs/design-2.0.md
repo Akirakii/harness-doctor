@@ -70,3 +70,22 @@ Each run cost about $1.60 on Sonnet, 16 cents a session, and 40 or more rules ca
 
 ### The name stays (user, 2026-11-16)
 - Harness Doctor, also now that it judges the domain knowledge. Names weighed and dropped: Setup Doctor, Context Doctor, Context Health, Claude Health, Playbook Health, By the Book. "Claude Doctor" is taken by another tool (millionco).
+
+## Built (2026-11-16, version 2.0.0)
+The plugin now does what this doc describes. Code: `app/reader.py` (logs and versions), `app/rules.py` (files cut into rules), `app/judge.py` (the question asked of Claude), `app/harness_doctor.py` (page data, server, `--report`), `app/index.html` (the page), `skills/fix`.
+Picks made while building, all (Claude) unless marked:
+- **Two judge runs per session,** one for the always-loaded files and one for the files that load on a trigger. Measured on 4 sessions judged twice: 56% of bad marks were found both times, against 36% with one run. Passing and failing rarely swap; the judge mostly misses a different half each time. It costs about 45% more.
+- **Counts per mark:** the judge reports how many moments of a rule came up in a session and how many broke it, shown on a mark's hover card ("broke it in about 4 of 20"). The counts are rough: 6 of 20 one run, 14 of 20 the next. A session still gets one mark per rule.
+- **A rule has its own history.** Its marks reset only when its own text changes, not when another rule in the file is edited. Without this, a file edited daily showed "No data" on every rule. "Regression" compares the rule's current wording with its previous one.
+- **10 sessions per press,** newest first, about 25 to 35 cents each. A session is judged when it's finished, and again only if it grew. A run that gets no answer leaves the session unjudged.
+- **Statuses are worked out on the server** and the page only shows them, so the page and the fix report can't disagree.
+- **The `diagnose` skill is gone;** `fix` does its job from the doctor's report (`harness_doctor.py --report`).
+- **Dropped from version 1:** the "judge them again" banner when the judge's instructions change, the re-check of uncovered problems against today's files, /insights scores as extra evidence, and the old saved marks.
+- **A project's own CLAUDE.md, skills and output styles** show under that project, named by the folder Claude Code was started in.
+- The page's fonts ship with the plugin, so it loads nothing from the internet.
+
+Still open:
+- An uncovered problem stays listed until its sessions age out, also after a rule is written for it.
+- A rule that applies to every reply still turns red from one slip in a session.
+- A worktree counts as its own project (a folder named `<project>-something` beside `<project>`).
+- Saved cases replayed on an edit; notes found by reading a file alone.

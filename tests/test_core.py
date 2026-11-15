@@ -1,14 +1,16 @@
-"""Tests for the parts of harness_doctor.py that don't need Claude or real session logs."""
-import importlib.util
+"""Tests for the parts of Harness Doctor that don't need Claude or real session logs."""
 import json
 import os
+import sys
 import tempfile
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-spec = importlib.util.spec_from_file_location("harness_doctor", os.path.join(HERE, "..", "app", "harness_doctor.py"))
-hd = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(hd)
+sys.path.insert(0, os.path.join(HERE, "..", "app"))
+import harness_doctor as doc  # noqa: E402
+import judge as jd  # noqa: E402
+import reader as hd  # noqa: E402  the tests below were written against the reader when it lived in harness_doctor.py
+import rules as rl  # noqa: E402
 
 
 class RowOf(unittest.TestCase):
@@ -56,39 +58,6 @@ class Edits(unittest.TestCase):
         self.assertIsNone(hd.udiff(None, "x"))
 
 
-class Versions(unittest.TestCase):
-    def row(self):
-        return {"scope": "global", "kind": "skill", "name": "s", "base": "v0", "clusters": [
-            {"session": "a", "start": "2026-01-01T00:00", "end": "2026-01-01T00:10", "edits": 1, "new": False, "text": "v1", "diff": "", "what": ""},
-            {"session": "b", "start": "2026-01-02T00:00", "end": "2026-01-02T00:10", "edits": 2, "new": False, "text": "v2", "diff": "", "what": ""},
-        ]}
-
-    def session(self, t, n=5):
-        return {"id": "s1", "cwd": "/x", "n": n, "t": t, "skills": [{"name": "s", "t": t}]}
-
-    def test_unused_version_folds_into_the_next(self):
-        r = self.row()
-        hd.merge_unused(r, [], {})
-        self.assertEqual(len(r["clusters"]), 1)
-        self.assertEqual(r["clusters"][0]["edits"], 3)
-        self.assertEqual(r["clusters"][0]["start"], "2026-01-01T00:00")
-
-    def test_marked_version_stays(self):  # a skill loaded in a judged session gets a mark
-        r = self.row()
-        hd.merge_unused(r, [self.session("2026-01-01T12:00")], {"s1": {"files": []}})
-        self.assertEqual(len(r["clusters"]), 2)
-
-    def test_used_but_unjudged_version_folds(self):
-        r = self.row()
-        hd.merge_unused(r, [self.session("2026-01-01T12:00")], {})
-        self.assertEqual(len(r["clusters"]), 1)
-
-    def test_short_sessions_dont_count(self):
-        r = self.row()
-        hd.merge_unused(r, [self.session("2026-01-01T12:00", n=1)], {"s1": {"files": []}})
-        self.assertEqual(len(r["clusters"]), 1)
-
-
 class OutsideChange(unittest.TestCase):
     def test_a_change_after_the_logs_is_a_version(self):
         with tempfile.NamedTemporaryFile("w", suffix=".md") as f:
@@ -120,137 +89,11 @@ class Heredocs(unittest.TestCase):
 
 
 class RuleTitles(unittest.TestCase):
-    def test_headings_and_bold_rule_titles(self):
-        text = "# How Claude works\n## Output\n21. **Replies are short.**\n   detail\n- **Never pad.** more\nplain line\n"
-        self.assertEqual(hd.rule_titles(text), "How Claude works · Output · Replies are short · Never pad")
-
-    def test_about_uses_the_version_text(self):
-        row = {"id": "/nope/CLAUDE.md", "scope": "global", "kind": "rules"}
-        self.assertEqual(hd.about(row, "## Replies\n"), "rules loaded in every session: Replies")
-        self.assertEqual(hd.about(row, "---\ndescription: Short replies.\n---\n# X"), "Short replies.")
-
     def test_version_at(self):
         row = {"id": "/nope", "base": "v0", "versions": [{"t": "2026-11-10", "text": "v1"}, {"t": "2026-11-12", "text": "v2"}]}
         self.assertEqual(hd.version_at(row, "2026-11-09"), (-1, "v0"))
         self.assertEqual(hd.version_at(row, "2026-11-11"), (0, "v1"))
         self.assertEqual(hd.version_at(row, "2026-11-13"), (1, "v2"))
-
-
-class SettleGaps(unittest.TestCase):
-    def setUp(self):
-        self.rules = {"id": "/g/CLAUDE.md", "scope": "global", "kind": "rules", "name": "CLAUDE.md", "created": None}
-        self.style = {"id": "/g/coworker.md", "scope": "global", "kind": "output style", "name": "coworker", "created": "2026-11-12T15:00"}
-        self.proj = {"id": "/p/a/CLAUDE.md", "scope": "/p/a", "kind": "rules", "name": "CLAUDE.md", "created": None}
-        self.d = {"rows": [self.rules, self.style, self.proj], "sessions": [
-            {"id": "old", "t": "2026-11-11T10:00", "cwd": "/p/b", "skills": []},
-            {"id": "new", "t": "2026-11-13T10:00", "cwd": "/p/b", "skills": []}]}
-
-    def gap(self, topic="overlong_replies"):
-        return {"topic": topic, "type": "verbose", "line": "Reply too long.", "you": "too long", "you_marks": ["too long"]}
-
-    def test_file_there_then_becomes_a_fail(self):
-        t = {"sessions": {"new": {"files": [{"file": "/g/coworker.md", "verdict": "worked", "line": "ok"}], "gaps": [self.gap()]}}}
-        self.assertEqual(hd.settle_gaps(t, self.d, {"overlong_replies": "/g/coworker.md"}), 1)
-        f = t["sessions"]["new"]["files"][0]
-        self.assertEqual((f["verdict"], f["line"], len(f["issues"])), ("failed", "Reply too long.", 1))
-        self.assertEqual(t["sessions"]["new"]["gaps"], [])
-
-    def test_file_written_later_deletes_the_gap(self):
-        t = {"sessions": {"old": {"files": [], "gaps": [self.gap()]}}}
-        self.assertEqual(hd.settle_gaps(t, self.d, {"overlong_replies": "/g/coworker.md"}), 1)
-        self.assertEqual(t["sessions"]["old"], {"files": [], "gaps": []})
-
-    def test_skill_there_but_not_loaded_is_a_miss(self):
-        skill = {"id": "/g/skills/remember/SKILL.md", "scope": "global", "kind": "skill", "name": "remember", "created": "2026-11-12T15:00"}
-        self.d["rows"].append(skill)
-        t = {"sessions": {"new": {"files": [], "gaps": [self.gap()]}, "old": {"files": [], "gaps": [self.gap()]}}}
-        self.assertEqual(hd.settle_gaps(t, self.d, {"overlong_replies": skill["id"]}), 2)
-        f = t["sessions"]["new"]["files"][0]
-        self.assertEqual((f["file"], f["verdict"], len(f["issues"])), (skill["id"], "missed", 1))
-        self.assertEqual(t["sessions"]["old"], {"files": [], "gaps": []})  # the skill came later: deleted
-
-    def test_other_projects_file_and_uncovered_gaps_stay(self):
-        t = {"sessions": {"new": {"files": [], "gaps": [self.gap(), self.gap("other")]}}}
-        self.assertEqual(hd.settle_gaps(t, self.d, {"overlong_replies": "/p/a/CLAUDE.md"}), 0)
-        self.assertEqual(len(t["sessions"]["new"]["gaps"]), 2)
-
-
-class StaleResults(unittest.TestCase):
-    def test_rules_are_the_triage_and_recheck_parts(self):
-        text = hd.rules_text()
-        self.assertTrue(text.startswith("## Triage mode"))
-        self.assertIn("## Re-check mode", text)
-        self.assertNotIn("## Output", text)
-
-    def test_older_rules_are_stale_but_new_messages_come_first(self):
-        s = {"id": "s", "n": 5, "cwd": "/p", "t": "2026-11-10T10:00", "end": "2026-11-10T11:00", "skills": []}
-        t = {"sessions": {"s": {"v": 3, "rules": "old", "n": 5, "files": [], "gaps": []}}}
-        self.assertTrue(hd.stale(s, "global", t, "new"))
-        self.assertFalse(hd.stale(s, "global", t, "old"))
-        t["sessions"]["s"]["n"] = 3  # it grew: the main button judges it, so it isn't counted as stale
-        self.assertFalse(hd.stale(s, "global", t, "new"))
-
-
-class MergeUnmarked(unittest.TestCase):
-    def test_versions_without_marks_fold_into_the_next(self):
-        row = {"id": "/g/CLAUDE.md", "kind": "rules", "scope": "global", "base": "a", "clusters": [
-            {"session": "e1", "start": "2026-11-01", "end": "2026-11-01", "edits": 1, "new": False, "text": "b", "diff": "", "what": ""},
-            {"session": "e2", "start": "2026-11-03", "end": "2026-11-03", "edits": 1, "new": False, "text": "c", "diff": "", "what": ""},
-            {"session": "e3", "start": "2026-11-05", "end": "2026-11-05", "edits": 1, "new": False, "text": "d", "diff": "", "what": ""}]}
-        sessions = [{"id": "s1", "t": "2026-11-02", "n": 5, "cwd": "/p", "skills": []},   # ran on v1, no verdict on this file
-                    {"id": "s2", "t": "2026-11-04", "n": 5, "cwd": "/p", "skills": []}]   # ran on v2, judged it
-        tri = {"s1": {"files": [{"file": "/other", "verdict": "worked"}]}, "s2": {"files": [{"file": "/g/CLAUDE.md", "verdict": "failed"}]}}
-        hd.merge_unused(row, sessions, tri)
-        self.assertEqual([(c["start"], c["end"], c["edits"]) for c in row["clusters"]],
-                         [("2026-11-01", "2026-11-03", 2), ("2026-11-05", "2026-11-05", 1)])
-
-
-class Usages(unittest.TestCase):
-    def session(self):
-        return {"id": "s", "n": 5, "cwd": "/p", "t": "2026-11-10T10:00", "end": "2026-11-10T11:00",
-                "skills": [{"name": "remember", "t": "2026-11-10T10:40"}, {"name": "remember", "t": "2026-11-10T10:05"}, {"name": "spot-gap", "t": "2026-11-10T10:20"}]}
-
-    def test_loads_in_order_and_only_repeats(self):
-        s = self.session()
-        self.assertEqual(hd.loads_by_skill(s)["remember"], ["2026-11-10T10:05", "2026-11-10T10:40"])
-        self.assertEqual(list(hd.loads_by_skill(s, more_than_once=True)), ["remember"])
-
-    def test_old_verdicts_with_a_repeated_skill_get_judged_again(self):
-        s = self.session()
-        t = {"sessions": {"s": {"v": 2, "files": [], "gaps": []}}}
-        self.assertTrue(hd.needs_judging(s, {}, "global", t))
-        t["sessions"]["s"].update(v=3, at="2026-11-10T12:00:00+00:00")
-        self.assertFalse(hd.needs_judging(s, {}, "global", t))
-
-    def test_new_messages_mean_judging_again(self):
-        s = self.session()
-        t = {"sessions": {"s": {"v": 3, "n": 5, "files": [], "gaps": []}}}
-        self.assertIsNone(hd.to_judge(s, "global", t))
-        s["n"] = 7
-        self.assertEqual(hd.to_judge(s, "global", t), "again")
-        del t["sessions"]["s"]["n"]  # an older result: compare the session's last message with when it was judged
-        t["sessions"]["s"]["at"] = "2026-11-10T10:30:00+00:00"
-        self.assertEqual(hd.to_judge(s, "global", t), "again")
-
-    def test_use_must_be_a_whole_number(self):
-        self.assertEqual(hd.clean_use({"use": 2})["use"], 2)
-        self.assertNotIn("use", hd.clean_use({"use": "2"}))
-        self.assertNotIn("use", hd.clean_use({"use": 0}))
-
-    def test_a_quiet_break_needs_claudes_words(self):
-        f = hd.clean_use({"verdict": "failed", "issues": [
-            {"type": "quiet_break", "quiet": True, "rule": "One idea", "line": "Packed three ideas.", "claude": "First… second… third…"},
-            {"type": "quiet_break", "quiet": True, "rule": "One idea", "line": "No quote."},
-            {"type": "wrong_approach", "quiet": False, "line": "Pushed back.", "you": "no"}]})
-        self.assertEqual([i["line"] for i in f["issues"]], ["Packed three ideas.", "Pushed back."])
-        self.assertNotIn("quiet", f["issues"][1])
-
-    def test_claudes_words_keep_the_start_and_end(self):
-        turns = [{"who": "Claude" if i % 2 else "You", "text": "x" * 500, "t": str(i)} for i in range(100)]
-        out = hd.claude_words("s", cap=10, turns=turns)
-        self.assertEqual(len(out), 10)
-        self.assertEqual((out[0]["time"], out[-1]["time"]), ("1", "99"))
-        self.assertLessEqual(len(out[0]["text"]), 325)
 
 
 class LiveSessions(unittest.TestCase):
@@ -266,6 +109,138 @@ class LiveSessions(unittest.TestCase):
                 self.assertEqual(hd.live_sessions(), {"alive"})
             finally:
                 hd.CLAUDE = old
+
+
+class CutRules(unittest.TestCase):
+    TEXT = """---
+name: x
+description: Do the thing. Use when asked.
+---
+# Title
+
+Intro prose under the title is not a rule.
+
+## How to think
+1. **Short tags.** Keep labels short.
+   A second line of the same rule.
+2. **Find the problem first,** then fit it.
+- A plain bullet with no bold start. More words here.
+
+## Asking
+Ask only when the wording is ambiguous.
+
+```
+- not a rule, it's inside a code block
+```
+"""
+
+    def test_items_and_prose_sections(self):
+        rules = rl.cut_rules(self.TEXT)
+        self.assertEqual([r["title"] for r in rules], ["Short tags", "Find the problem first", "A plain bullet with no bold start", "Asking"])
+        self.assertEqual(rules[0]["group"], "How to think")
+        self.assertIn("A second line", rules[0]["text"])
+        self.assertEqual(rules[3]["group"], "")  # a prose section is its own rule, named by its heading
+
+    def test_description_and_slug(self):
+        self.assertEqual(rl.description(self.TEXT), "Do the thing. Use when asked.")
+        self.assertEqual(rl.slug("Don't open with \"Got it\""), "don-t-open-with-got-it")
+
+
+class IndexedItems(unittest.TestCase):
+    def setUp(self):
+        self.k = tempfile.mkdtemp()
+        for d in ("shared/game-patterns", "projects/moon/redo-race"):
+            os.makedirs(os.path.join(self.k, d))
+        w = lambda p, text: open(os.path.join(self.k, p), "w").write(text)  # noqa: E731
+        w("note.md", "- a fact\n")
+        w("shared/game-patterns/feel.md", "long doc")
+        w("projects/projects.md", "x")
+        w("projects/moon/design.md", "x")
+        w("projects/moon/redo-race/ideas.md", "x")
+        w("INDEX.md", "| Note | Domain | What | Read when |\n|---|---|---|---|\n| `note.md` | games | a note | doing games |\n| `gone.md` | games | missing | never |\n")
+        w("shared/INDEX.md", "## `game-patterns/`: patterns\n| Doc | What | Read when |\n|---|---|---|\n| `feel.md` | feel | adding juice |\n")
+        w("projects/INDEX.md", "| Note or folder | What | Read when |\n|---|---|---|\n| `projects.md` | where | starting |\n| `moon/` | the game | any work on Moon |\n")
+        w("projects/moon/INDEX.md", "| Doc | What | Read when |\n|---|---|---|\n| `design.md` | rules | old versions |\n| `redo-race/` | now | any design work |\n")
+
+    def test_files_and_folders_with_their_scope(self):
+        items = {i["display"]: i for i in rl.indexed_items(self.k)}
+        self.assertEqual(set(items), {"note.md", "feel.md", "projects.md", "moon/", "design.md", "redo-race/"})  # a missing file is skipped
+        self.assertEqual((items["note.md"]["scope"], items["note.md"]["domain"], items["note.md"]["when"]), ("", "games", "doing games"))
+        self.assertEqual(items["feel.md"]["scope"], "Shared")  # found through the heading that names its folder
+        self.assertEqual(items["projects.md"]["scope"], "Every project")
+        self.assertEqual((items["moon/"]["scope"], items["moon/"]["kind"]), ("moon", "project"))
+        self.assertEqual((items["redo-race/"]["scope"], items["redo-race/"]["kind"]), ("moon", "folder"))
+        self.assertEqual((items["design.md"]["scope"], items["design.md"]["kind"]), ("moon", "note"))
+
+
+class WasRead(unittest.TestCase):
+    def test_a_folder_is_read_when_a_file_in_it_is(self):
+        d = tempfile.mkdtemp()
+        os.makedirs(os.path.join(d, "task"))
+        open(os.path.join(d, "task", "notes.md"), "w").write("x")
+        f = {"path": os.path.join(d, "task"), "isdir": True, "scope": "moon"}
+        self.assertTrue(rl.was_read(f, {os.path.join(d, "task", "notes.md")}))
+        self.assertFalse(rl.was_read(f, {os.path.join(d, "other.md")}))
+
+    def test_a_file_by_its_path_only(self):
+        f = {"path": "/k/projects/moon/design.md", "isdir": False, "scope": "moon"}
+        self.assertTrue(rl.was_read(f, {"/k/projects/moon/design.md"}))
+        self.assertTrue(rl.was_read(f, {"/home/u/Playground/moon/docs/design.md"}))  # where it lived before the notes moved
+        self.assertFalse(rl.was_read(f, {"/home/u/Playground/other/docs/design.md"}))  # another project's file of the same name
+
+    def test_projects_touched_needs_two_file_calls(self):
+        log = '{"file_path":"/p/moon/a.gd"} {"file_path": "/p/moon-hands/b.gd"} {"file_path":"/p/sun/a.gd"} "ls /p/star/"'
+        self.assertEqual(rl.projects_touched(log, {"moon", "sun", "star"}), {"moon"})
+
+
+class Statuses(unittest.TestCase):
+    M = staticmethod(lambda e, verdict: {"e": e, "verdict": verdict})
+
+    def test_the_four_statuses(self):
+        M = self.M
+        self.assertEqual(doc.status([], 2), "none")
+        self.assertEqual(doc.status([M(1, "x")], 2), "none")  # only marks on an older wording
+        self.assertEqual(doc.status([M(2, "ok"), M(1, "x")], 2), "good")  # fixed reads as healthy
+        self.assertEqual(doc.status([M(2, "x")], 2), "bad")
+        self.assertEqual(doc.status([M(2, "x"), M(1, "x"), M(1, "ok")], 2), "bad")
+        self.assertEqual(doc.status([M(2, "miss"), M(2, "ok"), M(1, "ok")], 2), "worse")  # clean before, a bad use now
+
+    def test_a_rule_keeps_its_marks_when_another_rule_is_edited(self):
+        f = {"id": "f", "kind": "rules", "rules": [{"id": "f#a", "part": "body", "text": ""}, {"id": "f#b", "part": "body", "text": ""}],
+             "versions": [{"v": 1, "when": "", "text": "- **A.** one\n- **B.** one\n"}, {"v": 2, "when": "Nov 2", "text": "- **A.** one\n- **B.** two\n"},
+                          {"v": 3, "when": "Nov 3", "text": None}]}  # a version whose text is unknown counts as unchanged
+        of, spans = doc.rule_epochs(f)
+        self.assertEqual(of["f#a"], [1, 1, 1])
+        self.assertEqual(of["f#b"], [1, 2, 2])
+        self.assertEqual(spans["f#b"], [{"e": 1, "when": ""}, {"e": 2, "when": "Nov 2"}])
+
+    def test_version_at(self):
+        vs = [{"v": 1, "t": ""}, {"v": 2, "t": "2026-11-02T10:00"}, {"v": 3, "t": "2026-11-05T10:00"}]
+        self.assertEqual([doc.version_at(vs, t) for t in ("2026-11-01T00:00", "2026-11-03T00:00", "2026-11-09T00:00")], [1, 2, 3])
+
+
+class JudgeAnswers(unittest.TestCase):
+    def test_only_sent_rules_and_known_verdicts_are_kept(self):
+        ids = {"f#a": "body", "f#load": "load"}
+        out = jd.clean_marks([
+            {"id": "f#a", "verdict": "pass", "came_up": 3, "failed": 0, "line": "did it"},
+            {"id": "f#zzz", "verdict": "fail", "claude": "x"},          # a rule that wasn't sent
+            {"id": "f#a", "verdict": "maybe"},                          # not a verdict
+            {"id": "f#a", "verdict": "fail", "line": "no quote"},       # a fail it can't show
+            {"id": "f#load", "verdict": "fail", "line": "never loaded"},  # a missed load has nothing to quote
+            "junk"], ids)
+        self.assertEqual([(m["rule"], m["verdict"]) for m in out], [("f#a", "pass"), ("f#load", "fail")])
+        self.assertEqual(out[0]["came_up"], 3)
+
+    def test_pending_is_new_or_grown_and_not_open(self):
+        sc = {"sessions": [{"id": "new", "n": 5}, {"id": "short", "n": 2}, {"id": "same", "n": 5}, {"id": "grown", "n": 9}]}
+        st = {"sessions": {"same": {"n": 5}, "grown": {"n": 5}}}
+        live, hd.live_sessions = hd.live_sessions, lambda: set()
+        try:
+            self.assertEqual([s["id"] for s in jd.pending(sc, st)], ["new", "grown"])
+        finally:
+            hd.live_sessions = live
+
 
 if __name__ == "__main__":
     unittest.main()

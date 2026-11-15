@@ -1,21 +1,39 @@
 # Harness Doctor
 
-A page that shows which of your Claude Code instructions help and which cause trouble.
+A page that shows which of the rules and facts you wrote for Claude Code hold up in real sessions, and which fail.
 
-You write CLAUDE.md files, skills and an output style, then keep tweaking them. Harness Doctor reads your own sessions and, for each file, marks every session that used it as a good use (✓) or a bad use (✕). For files with bad uses, it says why they fail and gives the exact edit to make.
+You write a CLAUDE.md, skills, an output style and notes, then keep tweaking them. Harness Doctor reads your own sessions and asks Claude one narrow question per rule: did this rule's moment come up, and was it followed? Every rule gets its own marks, a status, and a history across your edits. For what fails, it copies a prompt to fix it in a Claude Code conversation.
 
 ## What's on the page
 
-- **One card per file:** your global and project CLAUDE.md files, each skill, and your output style, colored by kind.
-- **✓ and ✕ per session:** hover a mark to see what happened and your own words at that moment.
-- **Versions:** each card's row shows every version's marks, newest on the left, with a dotted line and a label before each older version, so you can see whether an edit helped. Old versions fold into counts like "v5 2 ✕ 1 ✓" when the row runs out of room. The square shows the version (one Claude Code session's batch of edits): click it for the diff, scroll it to pick an older version.
-- **Judge new sessions:** judges the sessions it hasn't seen yet, then re-checks the problems no file covered against your files.
-- **Judge them again:** shows up when the judging rules changed (after an update to harness doctor). It lists how many sessions were judged with the older rules, shows the diff of the rules, and judges just those sessions again.
-- **Open a card:** it shows a prompt to paste into Claude Code, with a Copy prompt button. The prompt checks the file as it is now against every bad use in view, older versions included: for each, which line would have prevented it, and edits for the ones still open. Hover the ✕ tiles for each moment. Fixing a file takes a conversation, so the page doesn't suggest edits: paste the prompt into Claude Code and work it out there. The edit then shows up as a new version, and later sessions show whether it helped.
-- **Right-click to ask Claude:** right-click the page, a card or a ✕ and pick Copy prompt. It copies a prompt to paste into Claude Code, naming the files and sessions so Claude can read the logs itself.
-- **Problems tab:** issues that no file covers but keep coming back (2 or more sessions), with their count on the tab. Each problem is a card with a ✕ per session; hover a ✕ to see that moment, or open the card for a prompt that asks Claude where the fix belongs: a new skill, a CLAUDE.md rule or a hook.
-- **When a file starts covering a problem:** each run checks the open problems against today's files. If an edit to a file that was there covers it now, the problem becomes a ✕ on the version that lacked it. If a new file covers it, the problem leaves the list.
-- **Project picker:** look at one project's files and sessions, or Global.
+- **One card per file,** in one list: CLAUDE.md, the output style, each skill, and each note or folder of your knowledge. The stripe's color and the word under the name say which kind it is.
+- **A status per rule,** from four words:
+  - **Regression:** a bad use on the rule as it's written now, and it was clean before its last edit.
+  - **Failing:** a bad use on the rule as it's written now.
+  - **Healthy:** used as it's written now, with no bad use.
+  - **No data:** no use as it's written now.
+
+  A card's header sums up its rules ("1 regression", "2 failing"). Editing one rule doesn't reset the marks of the others.
+- **Open a card** for its rules: a dot per rule (red, green, hollow), and the word "Regression" where it applies. Put the mouse on a rule to see its ✓, ✕ and ○ (didn't load) marks, newest wording first. Put the mouse on a mark for that moment: what happened, your words and Claude's. Click a mark to keep it open, with a command that opens that session. Click a rule to read its text.
+- **History:** the file's edits, newest first. Each edit shows what it did to the rules (Regression, Fixed, Failing), its diff, and the file as it was.
+- **Files that load on a trigger** are judged in two parts: the line that loads them (a skill's description, a note's "read when") and what they say. "Didn't load" means the moment came up and the file stayed closed.
+- **Not covered yet:** problems seen in 2 or more sessions that nothing you wrote is about, as the last card of their group.
+- **Groups by scope:** "Everything" first, then what's shared, then a project when you pick it. The picker lists the projects you worked in during the last 7 days, then "Show all". Files with no marks fold away.
+- **Judge N new sessions:** judges your newest unjudged sessions, 10 per press.
+- **Copy fix prompt:** copies `/harness-doctor:fix`. Paste it into Claude Code and the `fix` skill goes through every regression, failing rule and uncovered problem, worst first and one at a time. Fixing takes a conversation, so the page doesn't suggest edits, and nothing from that conversation is fed back to the judge.
+
+## Your knowledge files
+
+If you keep notes for Claude in `~/.claude/domain-knowledge/` with `INDEX.md` files, each index line that names a file or a folder and ends in a "read when" cell becomes a card:
+
+```
+| Note | What it holds | Read when |
+|---|---|---|
+| `machine-setup.md` | paths and scripts | running a game or a long job |
+| `redo-race/` | the current design | any design work now |
+```
+
+A short note (up to 8,000 characters) is cut into its facts, each with its own marks. A longer doc or a folder is judged only on being read when its moment came up; reading any file inside a folder counts. Without that folder, the page shows your CLAUDE.md files, skills and output styles.
 
 ## Install
 
@@ -28,32 +46,35 @@ As a Claude Code plugin:
 
 Then type `/harness-doctor:open`, or ask Claude to "open harness doctor". It starts a small local server and opens the page in your browser.
 
-You can also ask in chat, for example "why does my explain-simple skill keep failing?", and the `diagnose` skill answers there.
-
 Without the plugin:
 
 ```
 python3 app/harness_doctor.py            # opens http://127.0.0.1:8737
-python3 app/harness_doctor.py --help     # --port, --data, --no-open, --background, --stop
+python3 app/harness_doctor.py --help     # --port, --data, --no-open, --background, --stop, --report
 ```
 
 Needs Python 3.10 or later and the `claude` command on your PATH. There's nothing else to install.
 
 ## What it costs
 
-It only calls Claude when you press **Judge new sessions** or **Judge them again**, using your own Claude Code login (`claude -p`):
+It only calls Claude when you press **Judge N new sessions**, using your own Claude Code login (`claude -p`, Sonnet):
 
-- **Judging:** one Sonnet run per 15 new sessions. Every session with a few messages gets judged, open ones too, since an issue no file covers counts as well; a session with new messages since it was judged gets judged again, and the status line counts those. It reads your messages, each with the end of the Claude message you were answering.
-- **Re-checking:** one Sonnet run after judging, only when the open problems or your files changed since the last check. It reads one line per problem and what each file is for.
+- Two runs per session: one for the files that are always loaded, one for the files that load on a trigger. Fewer rules per run made the judge agree with itself more often.
+- About 25 to 35 cents of usage per session in the author's setup (around 100 rules), so about $3 per press. The button's tooltip shows the estimate.
+- A file that wasn't loaded in a session is sent as its one loading line; only files that were loaded are sent in full.
+- A session is judged once it's finished, and again only if it grew.
 
-Each skill load in a session gets its own verdict.
+## How far to trust the marks
+
+The marks are Claude's judgment, and they vary. Judging the same 4 sessions twice, 56% of the bad marks showed up both times; the rest were found in only one of the runs. Marks rarely contradict each other (a rule passing in one run and failing in the other), so read a red rule as "worth a look", not as a measurement. The `fix` skill checks each mark with you before changing anything.
 
 ## Privacy
 
 - The server only listens on `127.0.0.1`, and rejects requests that come from other sites.
-- To judge, it sends excerpts of your sessions to Claude through `claude -p`, the same way any Claude Code session sends your messages. Those runs use no tools, and don't load your hooks or settings.
-- It never writes to your instruction files; fixes happen in your own Claude Code session.
-- Its results stay on your machine, in the plugin's data folder (`~/.claude/plugins/data/harness-doctor…/`, or `~/.local/share/harness-doctor` when run by hand). They're deleted 30 days after they're made, and when you uninstall the plugin.
+- The page loads nothing from the internet; its fonts ship with the plugin.
+- To judge, it sends excerpts of your sessions and the text of your rules to Claude through `claude -p`, the same way any Claude Code session sends your messages. Those runs use no tools, and don't load your hooks or settings.
+- It never writes to your files; fixes happen in your own Claude Code session.
+- Its marks stay on your machine, in the plugin's data folder (`~/.claude/plugins/data/harness-doctor…/`, or `~/.local/share/harness-doctor` when run by hand). They're dropped after 30 days, and when you uninstall the plugin.
 
 ## How it works, and what can break
 
@@ -61,29 +82,32 @@ It reads files Claude Code already keeps:
 
 | What | Where | Used for |
 |---|---|---|
-| Session logs | `~/.claude/projects/*/*.jsonl` | which skills loaded, your messages, every edit to a CLAUDE.md, skill or output style |
+| Session logs | `~/.claude/projects/*/*.jsonl` | your messages, Claude's replies and tool calls, which skills loaded and which files were read, every edit to a file it follows |
 | File-history snapshots | `~/.claude/file-history/` | the text of each version |
-| /insights scores, if you've run it | `~/.claude/usage-data/facets/` | extra evidence when judging |
 
 None of these formats are documented, so a Claude Code update can break it.
 
 Other limits:
 
-- Edits you make in your own editor aren't in the logs, so they don't show up as versions.
+- A file is cut into rules by its shape: a numbered or bulleted item is a rule, and a section of plain prose is one rule. A file written another way is cut badly.
+- A rule is followed across edits by its title. Rename a rule and its marks start over.
+- Edits you make in your own editor aren't in the logs, so they don't show up as versions; only the latest one is noticed.
 - Edits Claude made through shell commands (`cat >`, `sed -i`) are read on a best-effort basis.
 - It looks at the last 30 days, the same window Claude Code keeps logs for.
-- The ✓ and ✕ marks are Claude's judgment, so they can be wrong.
+- Marks from version 1 aren't carried over.
 
 ## Layout
 
 ```
 .claude-plugin/   plugin.json, marketplace.json
 skills/open/      /harness-doctor:open: starts the server and opens the page
-skills/diagnose/  the instructions Claude follows to judge and diagnose (also usable in chat)
-app/              harness_doctor.py (server, no dependencies) and index.html (the page)
-tests/            python3 -m unittest discover tests
+skills/fix/       /harness-doctor:fix: goes through what's failing and proposes edits
+app/              harness_doctor.py (server and page data), reader.py (logs and versions), rules.py (files cut into
+                  rules), judge.py (the question asked of Claude), index.html (the page), fonts/
+docs/             the 2.0 design and the research behind the judge
+tests/            python3 -m unittest discover -s tests
 ```
 
 ## License
 
-MIT
+MIT. The bundled fonts, Fredoka and Nunito, are under the SIL Open Font License.
