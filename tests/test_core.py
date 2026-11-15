@@ -237,6 +237,21 @@ class Usages(unittest.TestCase):
         self.assertNotIn("use", hd.clean_use({"use": "2"}))
         self.assertNotIn("use", hd.clean_use({"use": 0}))
 
+    def test_a_quiet_break_needs_claudes_words(self):
+        f = hd.clean_use({"verdict": "failed", "issues": [
+            {"type": "quiet_break", "quiet": True, "rule": "One idea", "line": "Packed three ideas.", "claude": "First… second… third…"},
+            {"type": "quiet_break", "quiet": True, "rule": "One idea", "line": "No quote."},
+            {"type": "wrong_approach", "quiet": False, "line": "Pushed back.", "you": "no"}]})
+        self.assertEqual([i["line"] for i in f["issues"]], ["Packed three ideas.", "Pushed back."])
+        self.assertNotIn("quiet", f["issues"][1])
+
+    def test_claudes_words_keep_the_start_and_end(self):
+        turns = [{"who": "Claude" if i % 2 else "You", "text": "x" * 500, "t": str(i)} for i in range(100)]
+        out = hd.claude_words("s", cap=10, turns=turns)
+        self.assertEqual(len(out), 10)
+        self.assertEqual((out[0]["time"], out[-1]["time"]), ("1", "99"))
+        self.assertLessEqual(len(out[0]["text"]), 325)
+
 
 class LiveSessions(unittest.TestCase):
     def test_only_running_processes_count(self):

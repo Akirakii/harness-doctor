@@ -8,9 +8,9 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#FFF7EC;--card:#FFFFFF;--ink:#2B2A33;--soft:#8C8897;--line:#F0E5D4;--coral:#F2545B;--coral-bg:#FFE2DF;--blue:#3B82E0;--blue-bg:#DCEAFF;--green:#1F9D6B;--green-bg:#DDF5EA;--purple:#8B5CF6;--yellow:#E8A800;--orange:#E2741F;--orange-bg:#FFE8D4}
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#16141D;--card:#211E2B;--ink:#F5F2FA;--soft:#A6A1B5;--line:#302C3D;--coral:#FF6B70;--coral-bg:#3A2030;--blue:#5DA5F2;--blue-bg:#1D2C45;--green:#3DD39A;--green-bg:#173A2D;--purple:#A78BFA;--yellow:#F5C542;--orange:#FF9A4D;--orange-bg:#3A2A1C}}
-:root[data-theme="dark"]{--bg:#16141D;--card:#211E2B;--ink:#F5F2FA;--soft:#A6A1B5;--line:#302C3D;--coral:#FF6B70;--coral-bg:#3A2030;--blue:#5DA5F2;--blue-bg:#1D2C45;--green:#3DD39A;--green-bg:#173A2D;--purple:#A78BFA;--yellow:#F5C542;--orange:#FF9A4D;--orange-bg:#3A2A1C}
+:root{--purple-bg:#EDE5FF;--bg:#FFF7EC;--card:#FFFFFF;--ink:#2B2A33;--soft:#8C8897;--line:#F0E5D4;--coral:#F2545B;--coral-bg:#FFE2DF;--blue:#3B82E0;--blue-bg:#DCEAFF;--green:#1F9D6B;--green-bg:#DDF5EA;--purple:#8B5CF6;--yellow:#E8A800;--orange:#E2741F;--orange-bg:#FFE8D4}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--purple-bg:#2C2342;--bg:#16141D;--card:#211E2B;--ink:#F5F2FA;--soft:#A6A1B5;--line:#302C3D;--coral:#FF6B70;--coral-bg:#3A2030;--blue:#5DA5F2;--blue-bg:#1D2C45;--green:#3DD39A;--green-bg:#173A2D;--purple:#A78BFA;--yellow:#F5C542;--orange:#FF9A4D;--orange-bg:#3A2A1C}}
+:root[data-theme="dark"]{--purple-bg:#2C2342;--bg:#16141D;--card:#211E2B;--ink:#F5F2FA;--soft:#A6A1B5;--line:#302C3D;--coral:#FF6B70;--coral-bg:#3A2030;--blue:#5DA5F2;--blue-bg:#1D2C45;--green:#3DD39A;--green-bg:#173A2D;--purple:#A78BFA;--yellow:#F5C542;--orange:#FF9A4D;--orange-bg:#3A2A1C}
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.45 Nunito,system-ui,sans-serif}
@@ -49,6 +49,7 @@ h1{font:700 42px/1.05 Fredoka,system-ui,sans-serif;margin:0;letter-spacing:-.01e
 .x{background:var(--coral-bg);color:var(--coral)}
 .ok{background:var(--green-bg);color:var(--green)}
 .miss{background:var(--orange-bg);color:var(--orange)}
+.x.qb{background:var(--purple-bg);color:var(--purple)}
 .x:hover,.ok:hover,.miss:hover{transform:scale(1.08)}
 .vdiff{grid-column:1/-1;border-top:2px dashed var(--line);margin-top:10px;padding-top:12px;cursor:auto}
 .vdiff h3{font:600 16px Fredoka,system-ui,sans-serif;margin:0}
@@ -57,6 +58,7 @@ h1{font:700 42px/1.05 Fredoka,system-ui,sans-serif;margin:0;letter-spacing:-.01e
 #tip b{font:600 21px/1.2 Fredoka,system-ui,sans-serif;color:var(--coral)}
 #tip b.okc{color:var(--green)}
 #tip b.missc{color:var(--orange)}
+#tip b.quietc{color:var(--purple)}
 #tip .tdate{color:var(--soft);font-size:13px;white-space:nowrap}
 #tip .say{margin-top:8px;padding:8px 10px;border-radius:12px;background:var(--bg);font-size:13px;line-height:1.4}
 #tip .who{display:block;font:600 12px Fredoka,system-ui,sans-serif;color:var(--soft);margin-bottom:2px}
@@ -251,16 +253,18 @@ pre.tall{max-height:65vh}
   }
   function showTip(e, spec) {
     const head = h("div", "thead");
-    head.append(h("b", spec.ok ? "okc" : spec.miss ? "missc" : null, spec.head), h("span", "tdate", day(spec.ms)));
+    head.append(h("b", spec.ok ? "okc" : spec.miss ? "missc" : spec.quiet ? "quietc" : null, spec.head), h("span", "tdate", day(spec.ms)));
     tip.replaceChildren(head);
-    const say = (you, marks) => { const q = h("div", "say"); q.append(h("span", "who", "You"), marked(you, marks)); return q; };
+    const say = (you, marks, who = "You") => { const q = h("div", "say"); q.append(h("span", "who", who), marked(you, marks)); return q; };
     if (spec.items && spec.items.length > 1) {
       for (const it of spec.items) {
         tip.append(h("div", "ihead", it.head + (it.line ? ": " + it.line : "")));
+        if (it.claude) tip.append(say(it.claude, it.claudeMarks, "Claude"));
         if (it.you) tip.append(say(it.you, it.marks));
       }
     } else {
       if (spec.line) tip.append(h("div", null, spec.line));
+      if (spec.claude) tip.append(say(spec.claude, spec.claudeMarks, "Claude"));
       if (spec.you) tip.append(say(spec.you, spec.marks));
     }
     tip.hidden = false; placeTip(e);
@@ -459,11 +463,13 @@ pre.tall{max-height:65vh}
         nOk++;
         marks.push([ms, () => tile("ok", "✓", {head: "good use", ok: true, ms, line: vd.line, you: vd.you})]);
       } else if (v === "failed") {
-        const items = issuesOf(vd).map(i => ({head: FR[i.type] || String(i.type || "issue").replace(/_/g, " "), line: i.line, you: i.you, marks: i.you_marks}));
+        const items = issuesOf(vd).map(i => i.quiet
+          ? {head: "quiet break", quiet: true, line: (i.rule ? "Broke \u201c" + i.rule + "\u201d: " : "") + (i.line || ""), claude: i.claude, claudeMarks: i.claude_marks, you: i.you, marks: i.you_marks}
+          : {head: FR[i.type] || String(i.type || "issue").replace(/_/g, " "), line: i.line, you: i.you, marks: i.you_marks});
         nBad += items.length;
         bads.push({sid, ms, items});
         for (const it of items) marks.push([ms, () => {  // one ✕ per issue, so a session with two issues shows two
-          const x = tile("x", "✕", Object.assign({ms}, it));
+          const x = tile(it.quiet ? "x qb" : "x", "✕", Object.assign({ms}, it));
           x.promptFn = () => issuePrompt(r, sid, [it]);  // right-click: copy a prompt about this issue
           return x;
         }]);
@@ -670,12 +676,16 @@ pre.tall{max-height:65vh}
       fitTiles();
       return;
     }
+    // Loads while a new skill was still being written (before its first version was finished) don't count as history.
+    const writtenAt = r => r.created && r.clusters.length ? Math.max(D.from, Date.parse(r.clusters[0].end)) : D.from;
+    const hasMarks = r => Array.from({length: Math.max(1, r.clusters.length)}, (_, j) => j).some(j => versionMarks(r, j).marks.length > 0);  // a file never changed has one version
     const fails = r => { const c = counts(r, r.clusters.length - 1); return c.x + c.miss; };
     const groups = scope === "global" ? [[null, globalRows()]] : [["Project: " + (D.scopes.find(x => x.key === scope) || {label: scope}).label, projectRows()], ["Global", globalRows()]];
     let hidden = 0;
     for (const [title, all] of groups) {
       const list = all.filter(r => {
-        const keep = showUnused || r.kind !== "skill" || sessionsUsing(r, since(r)).length > 0 || counts(r, r.clusters.length - 1).miss > 0;
+        // Hide only a skill with no history: no load and no mark in any version of the window.
+        const keep = showUnused || r.kind !== "skill" || sessionsUsing(r, writtenAt(r)).length > 0 || hasMarks(r);
         if (!keep) hidden++;
         return keep;
       }).sort((a, b) => ORDER[a.kind] - ORDER[b.kind] || (sessionsUsing(b, since(b)).length > 0) - (sessionsUsing(a, since(a)).length > 0) || fails(b) - fails(a) || a.name.localeCompare(b.name));
@@ -727,7 +737,7 @@ pre.tall{max-height:65vh}
     const n = Math.max(1, r.clusters.length), vn = "v" + n, lines = [];
     const since = r.clusters.length ? ", in force since " + when(Date.parse(r.clusters[n - 1].end)) : "";
     for (let j = n - 1; j >= 0; j--) for (const b of versionMarks(r, j).bads) {
-      const said = b.items.find(it => it.you), what = b.items.map(it => it.line || it.head).join("; ");
+      const said = b.items.find(it => it.you), what = b.items.map(it => (it.quiet ? "broke a rule with no pushback from me: " : "") + (it.line || it.head) + (it.claude ? ' (Claude said: "' + it.claude + '")' : "")).join("; ");
       lines.push("- v" + (j + 1) + ", " + when(b.ms) + ", session " + b.sid + ": " + (b.missed ? "didn't load when it should have: " : "") + what + (said ? ' (I said: "' + said.you + '")' : "") + (j === n - 1 ? " [still happening]" : ""));
     }
     return {vn, since, lines};
@@ -773,6 +783,7 @@ pre.tall{max-height:65vh}
     const s = D.byId.get(sid), out = ["In session " + sid + " (" + when(s.ms) + ", in " + s.cwd + "), " + r.path + " had " + (items.length > 1 ? "these issues:" : "this issue:")];
     for (const it of items) {
       out.push("- " + it.head + (it.line ? ": " + it.line : ""));
+      if (it.claude) out.push('  Claude said: "' + it.claude + '"');
       if (it.you) out.push('  I said: "' + it.you + '"');
     }
     out.push("Read that session's log (~/.claude/projects/*/" + sid + ".jsonl) around that moment, then tell me what happened and which line of " + r.path + " caused it.");

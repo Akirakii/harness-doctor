@@ -25,6 +25,7 @@ Gather it yourself: the file; the messages from `~/.claude/projects/*/<session_i
    Each ✓ or ✕ is one usage: CLAUDE.md and an output style are used once per session, a skill once per load.
    A session that loaded the skill more than once has `uses` (the time of each load): give one verdict per load, each with `use` (1 for the first), judged from the messages after that load.
 2. **For a failed session, split its issues.** Only the issues this file caused; each gets its type and one plain line under 12 words.
+   Also read Claude's own replies against the file's rules: a rule whose moment came up and that Claude broke is an issue even when the user never pushed back (a quiet break), with Claude's words as its quote.
 3. **Find each moment.** Quote the user's words and Claude's words where the issue happened, copied exactly and cut to the key part (under 200 characters each).
    Leave a side out (null) if it said nothing at that point; never invent a quote.
    In each quote, mark the 1–3 words or short phrases that show the issue (the pushback, the wrong claim, the confusion), copied exactly from the quote.
@@ -38,9 +39,14 @@ Gather it yourself: the file; the messages from `~/.claude/projects/*/<session_i
 ## Triage mode (the Harness Doctor page's "Judge new sessions" and "Judge them again" buttons)
 
 A cheap first pass over many sessions at once, from the user's own messages (no file text).
-Input: `files` (one per file version: id, name, kind, and `about`: its description, or else its headings and rule titles at that version, so a CLAUDE.md shows what it covered back then) and `sessions` (each with the ids of the `files` it touched, and `you`: the user's messages, each with its time and `after_claude`, the end of the Claude message it answered).
+Input: `files` (one per file version: id, name, kind, `about`: its description, or else its headings and rule titles at that version, so a CLAUDE.md shows what it covered back then, and `rules`: its headings and rule titles at that version) and `sessions` (each with the ids of the `files` it touched, `you`: the user's messages, each with its time and `after_claude`, the end of the Claude message it answered, and `claude`: the start of each of Claude's replies, with its time).
 Where /insights scored the session, it also has `issues` counted by type, `note`, `summary` and `outcome`; use them as extra evidence.
 Where it didn't, judge from `you` alone: pushback, corrections and confusion ("no", "i meant", "why did you") show an issue; type each one as `misunderstood_request`, `wrong_approach`, `buggy_code`, `excessive_changes` or a short snake_case name.
+Then check the other way, from the rules: for each file the session touched, read `claude` against that file's `rules`.
+Where a rule's moment came up and Claude's reply broke it, and the user didn't push back on it, add a quiet break to that file's issues: `quiet: true`, `rule` (the rule title, copied from `rules`), a `line`, `claude` (Claude's words that broke it, copied exactly, under 200 characters) and `claude_marks` (1–3 words in that quote that show the break).
+A quiet break makes the verdict `failed`.
+Report only a clear break you can quote; a rule that may have been bent, or that you can't see in the start of a reply, is not one.
+An issue the user did push back on stays an ordinary issue, judged from `you`.
 For each session, judge each file it touched with the steps above, but skip the diagnosis (every skill it loaded is `worked` or `failed`).
 A session's `uses` lists, for each skill it loaded more than once, the time of each load: give that skill one verdict per load, each with `use` (1 for the first).
 For every verdict and every issue, quote in `you` the user's words for it (the request a worked file served, or the words where the issue showed), copied exactly from `you`, under 200 characters; mark 1–3 words that show an issue in `you_marks`.
@@ -48,7 +54,7 @@ Leave out files that weren't involved.
 Also list the session's `gaps`: issues that none of its `files` is about, so a new skill, rule or hook would be their home.
 Leave out one-off slips no instruction could prevent.
 Give each gap a `topic`, a short snake_case name for the problem (e.g. `unverified_visuals`); reuse a topic from `known_gaps` (topics found before, each with one line) when it's the same problem, so repeats group together.
-Answer with only this JSON: `{"sessions": [{"session": "<id>", "files": [{"file": "<id>", "use": 1 (only with `uses`), "verdict": "worked" | "failed", "line": "...", "you": "..." or null, "issues": [{"type": "<type>", "line": "...", "you": "..." or null, "you_marks": ["..."]}]}], "gaps": [{"topic": "<snake_case>", "type": "<type>", "line": "...", "you": "..." or null, "you_marks": ["..."]}]}]}`
+Answer with only this JSON: `{"sessions": [{"session": "<id>", "files": [{"file": "<id>", "use": 1 (only with `uses`), "verdict": "worked" | "failed", "line": "...", "you": "..." or null, "issues": [{"type": "<type>", "line": "...", "you": "..." or null, "you_marks": ["..."]} or {"type": "quiet_break", "quiet": true, "rule": "...", "line": "...", "claude": "...", "claude_marks": ["..."]}]}], "gaps": [{"topic": "<snake_case>", "type": "<type>", "line": "...", "you": "..." or null, "you_marks": ["..."]}]}]}`
 
 ## Re-check mode (right after triage, on the same button)
 Gaps were judged against the files each session loaded, so a file may cover them: one written or changed since, or a skill that existed but didn't load.

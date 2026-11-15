@@ -189,7 +189,7 @@ def parse_log(path):
             if c:
                 cwd = c.group(1)
         snap = '"file-history-snapshot"' in line
-        if not (snap or '"type":"user"' in line or '"tool_use"' in line):
+        if not (snap or '"type":"user"' in line or '"type":"assistant"' in line):  # Claude's text-only replies count too
             continue
         try:
             d = json.loads(line)
@@ -645,17 +645,39 @@ def touched_files(s, rows):
     return out
 
 
-def your_words(sid, cap=40):
-    """The user's own messages in a session (time, text, and the end of the Claude message it answered), clipped."""
+def turns_of(sid):
     logs = glob.glob(os.path.join(CLAUDE, "projects", "*", sid + ".jsonl"))
-    turns, out, before = ((parse_log(logs[0])[0] or {}).get("turns", []) if logs else []), [], ""
+    return (parse_log(logs[0])[0] or {}).get("turns", []) if logs else []
+
+
+def keep_ends(out, cap):
+    return out if len(out) <= cap else out[: cap // 2] + out[-cap // 2:]  # keep the start and the end of long sessions
+
+
+def your_words(sid, cap=40, turns=None):
+    """The user's own messages in a session (time, text, and the end of the Claude message it answered), clipped."""
+    turns, out, before = (turns_of(sid) if turns is None else turns), [], ""
     for m in turns:
         if m["who"] == "Claude":
             before = m["text"]
         else:
             out.append({"time": m["t"], "text": clip(m["text"], 240), "after_claude": clip(before, 200, from_end=True) if before else None})
             before = ""
-    return out if len(out) <= cap else out[: cap // 2] + out[-cap // 2:]  # keep the start and the end of long sessions
+    return keep_ends(out, cap)
+
+
+def claude_words(sid, cap=24, turns=None):
+    """Claude's own replies in a session (time, the start of the text), so the triage can check them against the rules
+    even where the user never pushed back."""
+    turns = turns_of(sid) if turns is None else turns
+    return keep_ends([{"time": m["t"], "text": clip(m["text"], 320)} for m in turns if m["who"] == "Claude"], cap)
+
+
+def rule_list(row, text):
+    """The rules a file holds, as its headings and bold rule titles (a CLAUDE.md with its @imports), for the triage to
+    check Claude's replies against."""
+    text = text or ""
+    return rule_titles(text + "".join("\n" + (read(p) or "") for p in imports(row["id"], text)), cap=1800)
 
 
 def run_triage(d, todo):
@@ -663,17 +685,22 @@ def run_triage(d, todo):
     files, real, items = {}, {}, []  # files: one entry per file version, so each session sees what its version covered
     for s in todo:
         keys = []
+        loads = loads_by_skill(s)
         for i in touched_files(s, d["rows"]):
-            k, text = version_at(rows[i], s["t"])
+            # The text Claude had: a skill's is read when it loads, CLAUDE.md's and an output style's when the session starts.
+            t0 = (loads.get(rows[i]["name"]) or [s["t"]])[0] if rows[i]["kind"] == "skill" else s["t"]
+            k, text = version_at(rows[i], t0)
             key = f"{i}#v{k + 1}"
             if key not in files:
-                files[key] = {"id": key, "name": rows[i]["name"], "kind": rows[i]["kind"], "about": about(rows[i], text)}
+                files[key] = {"id": key, "name": rows[i]["name"], "kind": rows[i]["kind"], "about": about(rows[i], text),
+                              "rules": rule_list(rows[i], text)}
                 real[key] = i
             keys.append(key)
-        twice = loads_by_skill(s, more_than_once=True)
+        twice, turns = loads_by_skill(s, more_than_once=True), turns_of(s["id"])
         uses = {k: twice[rows[real[k]]["name"]] for k in keys if rows[real[k]]["kind"] == "skill" and rows[real[k]]["name"] in twice}
         items.append({"session": s["id"], "date": s["t"][:10], "issues": s.get("friction", {}), "note": s.get("detail", ""),
-                      "summary": s.get("summary", ""), "outcome": s.get("outcome", ""), "files": keys, "you": your_words(s["id"]),
+                      "summary": s.get("summary", ""), "outcome": s.get("outcome", ""), "files": keys, "you": your_words(s["id"], turns=turns),
+                      "claude": claude_words(s["id"], turns=turns),
                       **({"uses": uses} if uses else {})})
     doc = {"files": list(files.values()), "known_gaps": known_gaps(), "sessions": items}
     prompt = ("Act as the harness-doctor skill below, in triage mode: answer with the JSON only.\n\n" + skill_body() +
@@ -689,10 +716,24 @@ def run_triage(d, todo):
 
 
 def clean_use(f):
-    """A verdict's `use` (which load of a skill, 1 for the first) as a whole number, or none (one usage per session)."""
+    """A verdict's `use` (which load of a skill, 1 for the first) as a whole number, or none (one usage per session).
+    A quiet break (a rule broken with no pushback from the user) needs Claude's words, or it's dropped."""
     u = f.pop("use", None)
     if isinstance(u, int) and u >= 1:
         f["use"] = u
+    issues = []
+    for i in f.get("issues") or []:
+        if not isinstance(i, dict):
+            continue
+        if i.get("quiet"):
+            if not i.get("claude"):
+                continue
+            i["quiet"] = True
+        else:
+            i.pop("quiet", None)
+        issues.append(i)
+    if "issues" in f:
+        f["issues"] = issues
     return f
 
 
