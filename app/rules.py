@@ -263,11 +263,16 @@ def transcript(path, per_msg=1500, cap=70000):
     import json
     out, skills, reads = [], set(), set()
     for line in open(path, errors="ignore"):
-        if '"type":"user"' not in line and '"type":"assistant"' not in line:
+        if '"type":"user"' not in line and '"type":"assistant"' not in line and '"queued_command"' not in line:
             continue
         try:
             d = json.loads(line)
         except ValueError:
+            continue
+        att = d.get("attachment") or {}
+        if d.get("type") == "attachment":  # a message you sent while Claude was working isn't logged as a user turn
+            if att.get("type") == "queued_command" and (att.get("origin") or {}).get("kind") == "human" and str(att.get("prompt") or "").strip():
+                out.append("USER: " + rd.clip(str(att["prompt"]).strip(), per_msg))
             continue
         content = (d.get("message") or {}).get("content")
         if d.get("type") == "user" and not d.get("isMeta"):

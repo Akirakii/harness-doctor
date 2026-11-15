@@ -1,7 +1,7 @@
 {
   "name": "harness-doctor",
   "displayName": "Harness Doctor",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "See which of your written rules and facts hold up in real sessions: every rule in your CLAUDE.md, skills, output style and notes gets its own marks, judged from your own sessions, with a prompt to fix what fails.",
   "author": {
     "name": "Akirakii",

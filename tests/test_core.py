@@ -224,6 +224,14 @@ class WasRead(unittest.TestCase):
         self.assertTrue(rl.was_read(f, {"/home/u/Playground/moon/docs/design.md"}))  # where it lived before the notes moved
         self.assertFalse(rl.was_read(f, {"/home/u/Playground/other/docs/design.md"}))  # another project's file of the same name
 
+    def test_a_message_sent_while_claude_worked_is_in_the_transcript(self):
+        log = os.path.join(tempfile.mkdtemp(), "s.jsonl")
+        with open(log, "w") as fh:
+            fh.write(json.dumps({"type": "user", "message": {"content": "drop on click"}}, separators=(",", ":")) + "\n")  # as Claude Code writes it, with no spaces
+            fh.write(json.dumps({"type": "attachment", "attachment": {"type": "queued_command", "prompt": "also add stealing", "origin": {"kind": "human"}}}, separators=(",", ":")) + "\n")
+            fh.write(json.dumps({"type": "attachment", "attachment": {"type": "queued_command", "prompt": "a task finished", "origin": {"kind": "task"}}}, separators=(",", ":")) + "\n")
+        self.assertEqual(rl.transcript(log)[0], "USER: drop on click\nUSER: also add stealing")
+
     def test_projects_touched_needs_two_file_calls(self):
         log = '{"file_path":"/p/moon/a.gd"} {"file_path": "/p/moon-hands/b.gd"} {"file_path":"/p/sun/a.gd"} "ls /p/star/"'
         self.assertEqual(rl.projects_touched(log, {"moon", "sun", "star"}), {"moon"})
