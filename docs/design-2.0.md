@@ -89,3 +89,22 @@ Still open:
 - A rule that applies to every reply still turns red from one slip in a session.
 - A worktree counts as its own project (a folder named `<project>-something` beside `<project>`).
 - Saved cases replayed on an edit; notes found by reading a file alone.
+
+## Added 2026-11-18 (in the repo, not released)
+- **Tile rows** (user): a long row slides with press and drag, no wheel, and fades on the side that has more. Older wordings sit behind a thin line with dimmed tiles, and the line's hover card says "before <date>". The word "latest" stays, and a row with marks only on older wordings says "no data on latest".
+- **Unused rules** (user): the report ends with the rules that have no mark on any wording, one line per file, and the `fix` skill's last step finds why each never came up and whether to keep, reword, merge or remove it. The list of reasons is Claude's own, not researched.
+- **Login** (a guess, not confirmed): on a private Claude network the judge run couldn't log in. Likely cause: the run skips the user's settings, which is where a gateway, Bedrock or a key helper is set. The run now hands over the login settings by name, `HARNESS_DOCTOR_MODEL` picks the model, and the page shows Claude Code's own error. Checked only that settings passed this way take effect; the user's fix on that network wasn't seen.
+
+## Added 2026-11-19 (version 2.0.5): the fix skill can correct the judge
+Asked for by the user in chat; built by Claude while the user was away, after two critic rounds (task folder `judge-rules-and-turned-off-marks/`, read from this project's index).
+This reverses "Nothing feeds back" above (user): "not all issues are issues".
+- **A wrong mark can be turned off** (user): the fix skill runs `--turn-off <session> "<rule id>" --why "…"` after the user's yes. The mark stays on the page, struck through, with the reason and a count on the card; it has no say in its rule's status. `--turn-on` undoes it. A problem nothing covers can be turned off too. (Claude: the yes, the reason, staying in sight)
+- **The judge has rules the user can change** (user): `judge-rules.md` in the data folder, one bullet per kind of moment the judge keeps misreading. Every later judge run gets them after the built-in instructions. The fix skill proposes one when two turned-off marks are the same kind of mistake, and writes it after the user's yes. (Claude: the file's place, the two-marks trigger)
+- **The judge is on the page** (user), as the card "judge rules": its first row counts the marks turned off as wrong since its rules were last edited, then the user's rules, then the built-in instructions. It has no good marks, so it is "Failing" or "No data". (Claude)
+- **The plugin's own skills are on the page** (user), judged like any skill. The doctor keeps each text of them it has seen, so a step's marks survive a plugin update that didn't change it. (Claude)
+- The page still has no "This mark is wrong" button: turning off happens in the conversation. (kept)
+
+Still open from this:
+- A rule for the judge that is too wide hides real failures, and the page can't show a failure the judge no longer reports.
+- Which rule for the judge a wrong mark should have been stopped by isn't recorded.
+- Marks made before a rule for the judge stay as they are; there is no "judge them again".

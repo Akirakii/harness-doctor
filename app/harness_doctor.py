@@ -9,6 +9,7 @@ Run:   python3 harness_doctor.py                 starts the page on http://127.0
        python3 harness_doctor.py --background    the same, detached; if it's already running, just opens the page
        python3 harness_doctor.py --stop          stops a background server
        python3 harness_doctor.py --report        prints what is failing, worst first (the fix skill reads this)
+       python3 harness_doctor.py --turn-off SESSION RULE --why "…"   turns one wrong mark off (--turn-on undoes it)
 Flags: --port N, --data DIR (where it keeps its marks), --no-open, --project NAME (with --report), --dev (restart
        itself when its code changes)
 
@@ -94,9 +95,32 @@ def version_at(versions, t):
     return v
 
 
+WRONG = "judge#marks-turned-off-as-wrong"
+
+
+def judge_card():
+    """The judge on the page, as one more file: its first row collects every mark that was turned off as wrong (each
+    one is a bad mark on the judge), and under it the user's own rules for the judge, from judge-rules.md."""
+    path = rd.judge_rules_path()
+    rules = [{"id": WRONG, "part": "body", "group": "How it's doing", "title": "Marks turned off as wrong",
+              "text": "Every mark the fix skill turned off as wrong is a bad mark on the judge, counted from the last edit of the rules below. "
+                      "When the same kind of wrong mark comes back, write a rule for the judge: " + path.replace(rd.HOME, "~", 1)}]
+    seen = {WRONG}
+    for group, text in (("Your rules for the judge", rd.read(path) or ""), ("Built into the plugin", jd.INSTRUCTIONS)):
+        for r in rl.cut_rules(text):
+            rid = "judge#" + rl.slug(r["title"])
+            if rid not in seen:
+                seen.add(rid)
+                rules.append({"id": rid, "part": "body", "group": group, "title": r["title"], "text": r["text"]})
+    return {"id": "judge", "name": "judge rules", "display": "judge rules", "label": "what the judge is told", "kind": "judge", "scope": "",
+            "path": path.replace(rd.HOME, "~", 1), "trigger": False, "isdir": False, "index": None, "rules": rules}
+
+
 def rule_texts(f, text):
     """{rule id: its text} for one version of a file, cut the same way the catalog cuts it."""
     out = {}
+    if f["kind"] == "judge":
+        out[WRONG] = text or ""  # the count of wrong marks starts again at every edit of the judge's rules
     for r in f["rules"]:
         if r["part"] == "load":
             out[r["id"]] = rl.description(text) if f["kind"] == "skill" else r["text"]
@@ -147,13 +171,23 @@ TEXTS = {}  # (file id, version) -> that version's text, for "Show source file";
 def page_data(sc, st):
     """Everything the page shows, in one object: the files with their rules, versions and statuses, the marks, the
     problems nothing covers, the projects in use, and what the judge button would do."""
-    files = [f for f in rl.catalog(sc) if f["rules"]]
+    files = [f for f in rl.catalog(sc) if f["rules"]] + [judge_card()]
     by_id = {s["id"]: s for s in sc["sessions"]}
+    off = jd.load_off()
+    title = {r["id"]: r["title"] for f in files for r in f["rules"]}
     rule_file = {r["id"]: f for f in files for r in f["rules"]}
     part = {r["id"]: r["part"] for f in files for r in f["rules"]}
     epoch_of = {}
     for f in files:
         f["versions"] = versions_of(sc, f)
+        if f["kind"] == "judge":  # before its first edit the judge had no rules of the user's: that is a version too,
+            vs = f["versions"]    # so a mark turned off before a rule was written doesn't count against that rule
+            if not vs[0]["base"]:
+                vs.insert(0, {"t": "", "when": "", "base": True, "diff": None, "text": "", "load": None})
+            elif vs[0]["text"] is None:
+                vs[0]["text"] = ""
+            for i, v in enumerate(vs, 1):
+                v["v"] = i
         path = os.path.expanduser(f["path"])  # a session from before the file, or before its index, has no say on it
         f["since"] = max(rd.born(path) if f["isdir"] else rd.since(rd.row(sc, path), rd.born(path)),
                          rd.since(rd.row(sc, f["index"]), rd.born(f["index"])) if f.get("index") else "")
@@ -173,23 +207,42 @@ def page_data(sc, st):
                 continue  # the rule was since renamed or removed, the judge couldn't tell, or the session is older than the file
             n += 1
             v = version_at(f["versions"], s["t"])
+            o = jd.is_off(off, sid, m["rule"], e, jd.words_of(m)) if m["verdict"] == "fail" else None
+            wrong = bool(o)  # turned off as wrong: it stays in sight, and has no say in the rule's status
             moments.append({"id": f"m{n}", "sid": sid, "file": f["id"], "rule": m["rule"], "v": v, "e": epoch_of[m["rule"]][v - 1],
                             "verdict": "ok" if m["verdict"] == "pass" else "miss" if part[m["rule"]] == "load" else "x",
                             "when": day(s["t"]), "t": s["t"], "project": project, "line": m["line"], "you": m.get("you"), "claude": m.get("claude"),
-                            "came_up": m.get("came_up"), "failed": m.get("failed")})
+                            "came_up": m.get("came_up"), "failed": m.get("failed"), "wrong": wrong, "why": o["why"] if wrong else None})
+            if wrong:  # the same mark, as a bad mark on the judge: placed by when it was turned off, so the count
+                n += 1  # since the judge's rules were last edited holds the wrong marks no rule was written for yet
+                jf = rule_file[WRONG]
+                jv = version_at(jf["versions"], o["t"])
+                moments.append({"id": f"m{n}", "sid": sid, "file": "judge", "rule": WRONG, "v": jv, "e": epoch_of[WRONG][jv - 1], "verdict": "x",
+                                "when": day(e["at"]), "t": e["at"], "project": project, "you": m.get("you"), "claude": m.get("claude"),
+                                "line": f"Wrong mark on \u201c{title[m['rule']]}\u201d: {o['why']}", "came_up": None, "failed": None, "wrong": False, "why": None})
         for u in e.get("uncovered", []):
             n += 1
+            o = jd.is_off(off, sid, "gap:" + u["topic"], e, u["topic"])
             topics[u["topic"]].setdefault(sid, {"id": f"g{n}", "sid": sid, "verdict": "x", "when": day(s["t"]), "t": s["t"], "project": project,
-                                               "line": u["line"], "you": u.get("you"), "claude": None})
+                                               "line": u["line"], "you": u.get("you"), "claude": None, "wrong": bool(o), "why": o["why"] if o else None})
+            if o:
+                n += 1
+                jf = rule_file[WRONG]
+                jv = version_at(jf["versions"], o["t"])
+                moments.append({"id": f"m{n}", "sid": sid, "file": "judge", "rule": WRONG, "v": jv, "e": epoch_of[WRONG][jv - 1], "verdict": "x",
+                                "when": day(e["at"]), "t": e["at"], "project": project, "you": u.get("you"), "claude": None,
+                                "line": f"Wrong problem \u201c{u['topic']}\u201d: {o['why']}", "came_up": None, "failed": None, "wrong": False, "why": None})
     by_rule = defaultdict(list)
     for m in moments:
-        by_rule[m["rule"]].append(m)
+        if not m["wrong"]:  # a mark turned off as wrong has no say in its rule's status
+            by_rule[m["rule"]].append(m)
     for f in files:
         for r in f["rules"]:
             r["status"] = status(by_rule[r["id"]], r["epochs"][-1]["e"])
         for v in f["versions"]:
             TEXTS[(f["id"], v["v"])] = v.pop("text")  # sent only when asked for
-    gaps = [{"topic": t, "moments": sorted(ms.values(), key=lambda m: m["t"], reverse=True)} for t, ms in topics.items() if len(ms) >= 2]
+    gaps = [{"topic": t, "moments": sorted(ms.values(), key=lambda m: m["t"], reverse=True)} for t, ms in topics.items()
+            if sum(1 for m in ms.values() if not m["wrong"]) >= 2]  # a problem needs 2 sessions that weren't turned off
     todo = jd.pending(sc, st)
     return {"files": files, "moments": sorted(moments, key=lambda m: m["t"], reverse=True), "gaps": sorted(gaps, key=lambda g: -len(g["moments"])),
             "active": rl.active_projects(sc), "judged": len([k for k in st["sessions"] if k in by_id]),
@@ -206,16 +259,17 @@ def report(project=""):
     out = [f"# Harness Doctor report ({d['judged']} sessions judged)", ""]
     rows = []
     for f in d["files"]:
-        if not show(f["scope"]):
+        if not show(f["scope"]) or f["kind"] == "judge":  # the judge has its own part, at the end
             continue
         for r in f["rules"]:
             if r["status"] in ("worse", "bad"):
-                ms = [m for m in d["moments"] if m["rule"] == r["id"]]
+                ms = [m for m in d["moments"] if m["rule"] == r["id"] and not m["wrong"]]
                 bad = [m for m in ms if m["e"] == r["epochs"][-1]["e"] and m["verdict"] != "ok"]
                 rows.append((0 if r["status"] == "worse" else 1, -len(bad), f, r, ms, bad))
     for _, _, f, r, ms, bad in sorted(rows, key=lambda x: x[:2]):
         good = sum(1 for m in ms if m["e"] == r["epochs"][-1]["e"] and m["verdict"] == "ok")
         out += [f"## {STATUS[r['status']]}: {r['title']}", f"File: {f['path']} ({f['label']}" + (f", {f['scope']}" if f["scope"] else "") + ")",
+                f"Rule id: {r['id']}",
                 f"On the rule as it is written now: {len(bad)} bad, {good} good." + (" It was clean before its last edit." if r["status"] == "worse" else ""),
                 "", "The rule as written:", *("> " + line for line in r["text"].splitlines()), ""]
         if r["status"] == "worse" and f["versions"][-1]["diff"]:
@@ -223,7 +277,7 @@ def report(project=""):
         for m in bad:
             kind = "didn't load" if m["verdict"] == "miss" else "bad use"
             count = f" (broke it in {m['failed']} of {m['came_up']} moments)" if (m.get("came_up") or 0) > 1 and m.get("failed") else ""
-            out += [f"- {m['when']}, {m['project']}, {kind}: {m['line']}{count}"]
+            out += [f"- {m['when']}, {m['project']}, session {m['sid'][:8]}, {kind}: {m['line']}{count}"]
             if m.get("you"):
                 out += [f"  - you: {m['you']}"]
             if m.get("claude"):
@@ -232,13 +286,20 @@ def report(project=""):
         out += [""]
     gaps = [g for g in d["gaps"] if show(next(iter({m["project"] for m in g["moments"]})) if len({m["project"] for m in g["moments"]}) == 1 else "")]
     for g in gaps:
-        out += [f"## Not covered yet: {g['topic']}", f"Seen in {len(g['moments'])} sessions; nothing written is about it."]
-        for m in g["moments"]:
-            out += [f"- {m['when']}, {m['project']}: {m['line']}"] + ([f"  - you: {m['you']}"] if m.get("you") else []) + [f"  - session log: {logs.get(m['sid'], '?')}"]
+        live = [m for m in g["moments"] if not m["wrong"]]
+        out += [f"## Not covered yet: {g['topic']}", f"Seen in {len(live)} sessions; nothing written is about it."]
+        for m in live:
+            out += [f"- {m['when']}, {m['project']}, session {m['sid'][:8]}: {m['line']}"] + ([f"  - you: {m['you']}"] if m.get("you") else []) + [f"  - session log: {logs.get(m['sid'], '?')}"]
         out += [""]
     if not rows and not gaps:
         out += ["Nothing is failing in the sessions judged so far." if d["judged"] else "No sessions are judged yet. Open the page and press the judge button first.", ""]
     out += unused(d, show)
+    jf = next(f for f in d["files"] if f["kind"] == "judge")
+    since = [m for m in d["moments"] if m["rule"] == WRONG and m["e"] == jf["rules"][0]["epochs"][-1]["e"]]
+    mine = [r for r in jf["rules"] if r["group"] == "Your rules for the judge"]
+    out += ["## The judge", f"Your rules for the judge: {len(mine)}, in {rd.judge_rules_path()}", *("- " + r["title"] for r in mine),
+            f"Marks turned off as wrong since those rules were last edited: {len(since)}." + (" Two of one kind call for a rule for the judge." if len(since) > 1 else ""),
+            *(f"- {m['when']}, session {m['sid'][:8]}: {m['line']}" for m in since), ""]
     return "\n".join(out)
 
 
@@ -249,7 +310,7 @@ def unused(d, show, cap=12):
     marked = {m["rule"] for m in d["moments"]}
     lines, total = [], 0
     for f in d["files"]:
-        idle = [r["title"] for r in f["rules"] if r["id"] not in marked] if show(f["scope"]) else []
+        idle = [r["title"] for r in f["rules"] if r["id"] not in marked] if show(f["scope"]) and f["kind"] != "judge" else []
         if not idle:
             continue
         total += len(idle)
@@ -386,6 +447,9 @@ def main():
     ap.add_argument("--stop", action="store_true", help="stop a background server")
     ap.add_argument("--report", action="store_true", help="print what is failing, worst first, no server")
     ap.add_argument("--project", default="", help="with --report: also include this project's group")
+    ap.add_argument("--turn-off", nargs=2, metavar=("SESSION", "RULE"), help="turn one bad mark off as wrong: the start of its session id, and the rule's id or title")
+    ap.add_argument("--turn-on", nargs=2, metavar=("SESSION", "RULE"), help="turn a mark back on")
+    ap.add_argument("--why", default="", help="with --turn-off: why the mark is wrong, shown on the page")
     ap.add_argument("--dev", action="store_true", help="restart when this file changes")
     args = ap.parse_args()
     PORT = args.port
@@ -402,8 +466,13 @@ def main():
         except (OSError, ValueError):
             print("No background server to stop.")
         return
+    rd.READ_ONLY = bool(args.report or args.turn_off or args.turn_on)  # only the server records the plugin's skill texts
     if args.report:
         print(report(args.project))
+        return
+    if args.turn_off or args.turn_on:
+        files = rl.catalog(rd.scan()) + [judge_card()]
+        print(jd.turn_off(jd.load_store(), files, *(args.turn_off or args.turn_on), args.why, restore=bool(args.turn_on)))
         return
     if running():
         return open_page(args)

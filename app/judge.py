@@ -68,6 +68,99 @@ def store_path():
     return rd.data_path("marks.json")
 
 
+YOURS = """
+
+## The user's rules for you
+The user wrote these after finding marks of yours that were wrong. Each says how to read one kind of moment. Where one
+of them applies, follow it; everywhere else the instructions above hold, and a rule is still judged as it is written.
+
+"""
+
+
+def user_rules():
+    """The user's own rules for the judge (judge-rules.md in the data folder), as text; "" when there are none."""
+    text = (rd.read(rd.judge_rules_path()) or "").strip()
+    return text if any(rl.ITEM.match(line) for line in text.splitlines()) else ""
+
+
+def instructions():
+    """What every judge run is told: the built-in instructions, then the user's rules when there are any."""
+    mine = user_rules()
+    return INSTRUCTIONS + (YOURS + mine if mine else "")
+
+
+def off_path():
+    return rd.data_path("turned-off.json")
+
+
+def load_off():
+    """The marks turned off as wrong: {"<session id> <rule id or gap:topic>": {"at": when that session was judged,
+    "quote": Claude's words the mark quoted, "why", "t": when it was turned off}}. An entry holds for the judging it
+    was made on, and for a later judging of the same session that quotes the same words (see is_off)."""
+    off = rd.load_json(off_path(), {})
+    return off if isinstance(off, dict) else {}
+
+
+def words_of(m):
+    """The words a mark is known by when its session is judged again: Claude's, else the user's, else its one line."""
+    return m.get("claude") or m.get("you") or m.get("line") or None
+
+
+def is_off(off, sid, key, entry, quote=None):
+    """Is this mark turned off? Yes when the session wasn't judged again since, or was and the mark quotes the same words."""
+    o = off.get(sid + " " + key)
+    if o and (o.get("at") == entry.get("at") or (quote and o.get("quote") == quote)):
+        return o
+    return None
+
+
+def find_mark(st, files, session, rule):
+    """The one bad mark a turn-off names: `session` is the start of a session id, `rule` a rule's id or its title, or
+    the name of a problem nothing covers. -> (session id, the mark's key, the saved entry, the words it quoted, None)
+    or (None, None, None, None, why it wasn't found)"""
+    sids = [k for k in st["sessions"] if k.startswith(session)]
+    if len(sids) != 1:
+        return None, None, None, None, f"{'No' if not sids else 'More than one'} judged session starts with {session!r}."
+    entry = st["sessions"][sids[0]]
+    low = rule.strip().lower()
+    ids = {r["id"] for f in files for r in f["rules"] if r["id"].lower() == low or r["title"].lower().rstrip(".") == low.rstrip(".")}
+    hits = [m for m in entry.get("marks", []) if m["rule"] in ids and m["verdict"] == "fail"]
+    if not hits:
+        gap = [u for u in entry.get("uncovered", []) if u["topic"].lower() == low]
+        if gap:
+            return sids[0], "gap:" + gap[0]["topic"], entry, gap[0]["topic"], None  # a problem is known by its name
+        return None, None, None, None, f"That session has no bad mark on a rule, and no uncovered problem, called {rule!r}."
+    if len({m["rule"] for m in hits}) != 1:
+        return None, None, None, None, f"More than one rule is called {rule!r}; use the rule id from the report."
+    return sids[0], hits[0]["rule"], entry, words_of(hits[0]), None
+
+
+def turn_off(st, files, session, rule, why, restore=False):
+    """Turn one bad mark off as wrong, with the reason, or turn it back on. -> one line saying what happened."""
+    off, low = load_off(), rule.strip().lower()
+    if restore:  # a turn-off whose mark is gone (the session was judged again) can still be taken out
+        old = [k for k in off if k.startswith(session) and k.split(" ", 1)[1].lower() in (low, "gap:" + low)]
+        if len(old) == 1:
+            del off[old[0]]
+            rd.save_json(off_path(), off)
+            return f"Turned back on: {old[0].split(' ', 1)[1]} in session {old[0][:8]}."
+    sid, rid, entry, quote, err = find_mark(st, files, session, rule)
+    if err:
+        return err
+    key = sid + " " + rid
+    if restore:
+        if key not in off:
+            return "That mark wasn't turned off."
+        del off[key]
+        rd.save_json(off_path(), off)
+        return f"Turned back on: {rid} in session {sid[:8]}."
+    if not (why or "").strip():
+        return "Give the reason with --why: it shows on the page beside the mark."
+    off[key] = {"at": entry["at"], "quote": quote, "why": rd.one_line(why, 300), "t": rd.now_iso()}
+    rd.save_json(off_path(), off)
+    return f"Turned off: {rid} in session {sid[:8]}. The page shows it struck through, with the reason."
+
+
 def load_store():
     """The saved marks: {"sessions": {session id: {"at", "n", "cost", "loaded", "marks", "uncovered"}}}. Marks older than
     the window are dropped."""
@@ -167,7 +260,7 @@ def judge_session(sc, s, topics):
     for part in ([r for r in sent if r["kind"] in rl.ALWAYS], [r for r in sent if r["kind"] not in rl.ALWAYS]):
         if not part:
             continue
-        prompt = (INSTRUCTIONS + "\n\n## The rules\n" + json.dumps({"rules": part, "known_topics": topics}, ensure_ascii=False) +
+        prompt = (instructions() + "\n\n## The rules\n" + json.dumps({"rules": part, "known_topics": topics}, ensure_ascii=False) +
                   "\n\n## The session\n" + text)
         ans, c = ask(prompt)
         cost += c

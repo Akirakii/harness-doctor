@@ -347,6 +347,7 @@ main{padding-bottom:130px}
 .hc.broke .hk{color:var(--coral);font-weight:800}
 :root{--teal:#2BB3B1}
 .fc.k-note{--kind:var(--teal)}
+.fc.k-judge{--kind:var(--coral)}
 .group{margin:16px 4px 2px}
 .group:first-child{margin-top:0}
 
@@ -393,7 +394,7 @@ main{padding-bottom:130px}
   let FILES = [], MOMENTS = [], GAPS = [], ACTIVE = [], PENDING = {count: 0}, JUDGED = 0;
 
   // ---------- helpers ----------
-  const KC = {"rules": "k-rules", "output style": "k-style", "skill": "k-skill", "note": "k-note"}, ORDER = {"rules": 0, "output style": 1, "skill": 2, "note": 3};
+  const KC = {"rules": "k-rules", "output style": "k-style", "skill": "k-skill", "note": "k-note", "judge": "k-judge"}, ORDER = {"rules": 0, "output style": 1, "skill": 2, "judge": 3, "note": 4};
   const GLYPH = {x: "✕", ok: "✓", miss: "○"}, HEAD = {x: "bad use", ok: "good use", miss: "didn't load"};
   const $ = id => document.getElementById(id), tip = $("tip");
   let tab = "files", pinned = null;
@@ -420,9 +421,10 @@ main{padding-bottom:130px}
   // ---------- hover card: hover a mark to read its moment, click the mark to keep it open ----------
   function fillTip(m, rule) {
     tip.replaceChildren();
-    const head = h("div", "thead"), b = h("b", m.verdict === "ok" ? "okc" : m.verdict === "miss" ? "missc" : null, m.wrong ? "marked wrong" : HEAD[m.verdict]);
+    const head = h("div", "thead"), b = h("b", m.verdict === "ok" ? "okc" : m.verdict === "miss" ? "missc" : null, m.wrong ? "turned off" : HEAD[m.verdict]);
     head.append(b, h("span", "tdate", m.when + " · " + m.project));
     tip.append(head, h("div", null, m.line));
+    if (m.wrong && m.why) tip.append(h("div", "meta", "Turned off as wrong: " + m.why));
     if (m.came_up > 1 && m.verdict !== "ok") tip.append(h("div", "meta", "Broke it in about " + (m.failed || 1) + " of " + m.came_up + " moments in this session."));
     if (m.you) { const s = h("div", "say"); s.append(h("span", "who", "You"), marked(m.you, m.marks)); tip.append(s); }
     if (m.claude) { const s = h("div", "say"); s.append(h("span", "who", "Claude"), marked(m.claude, m.cmarks)); tip.append(s); }
@@ -496,6 +498,8 @@ main{padding-bottom:130px}
     if (cnt("worse")) out.append(h("span", "st worse", cnt("worse") + (cnt("worse") === 1 ? " regression" : " regressions")));
     if (cnt("bad")) out.append(h("span", "sm bad", cnt("bad") + " failing"));
     if (!out.children.length) { const k = cnt("good") ? "good" : "none"; out.append(h("span", "sm " + k, STATUS[k])); }
+    const offN = MOMENTS.filter(m => m.file === f.id && m.wrong).length;  // marks the fix skill turned off stay counted in sight
+    if (offN) out.append(h("span", "sm none", offN + " turned off"));
     return out;
   }
   // A long row of tiles: press and drag slides it sideways, and the side that has more tiles fades out.
@@ -684,7 +688,7 @@ main{padding-bottom:130px}
   }
   function gapCard(g, i) {
     const c = h("div", "card k-gaps"), left = h("div"), o = h("div", "xs");
-    left.append(h("div", "nm", g.topic), h("div", "sub", g.moments.length + " sessions"));
+    left.append(h("div", "nm", g.topic), h("div", "sub", g.moments.filter(m => !m.wrong).length + " sessions"));
     for (const m of g.moments) o.append(tile(m, null));
     c.append(left, o);
     c.addEventListener("click", e => { if (e.target.closest(".more")) return; gapOpen.has(i) ? gapOpen.delete(i) : gapOpen.add(i); render(); });
@@ -715,7 +719,7 @@ main{padding-bottom:130px}
     for (const g of gaps) {
       const row = h("div", "rr"), marks = scrolls(h("span", "marks"));
       for (const m of g.moments) marks.append(tile(m, null));  // the tiles show while the mouse is on the problem
-      row.append(h("span", "dot d-gap"), h("span", "tname", g.topic), marks, h("span", "sm none", g.moments.length + " sessions"));
+      row.append(h("span", "dot d-gap"), h("span", "tname", g.topic), marks, h("span", "sm none", g.moments.filter(m => !m.wrong).length + " sessions"));
       list.append(row);
     }
     body.append(list);
@@ -725,7 +729,7 @@ main{padding-bottom:130px}
   // What shows: the levels that hold everywhere are always there; a project's group only when it's picked.
   const GENERAL = ["", "Shared", "Every project"];
   const scopeLabel = sc => sc === "" ? "Everything" : GENERAL.includes(sc) ? sc : "Project: " + sc;
-  const hasMarks = f => MOMENTS.some(m => m.file === f.id);
+  const hasMarks = f => f.kind === "judge" || (MOMENTS.some(m => m.file === f.id));  // the judge always shows
   const showEmpty = new Set();
   let pick = "";
   function fillPicker() {

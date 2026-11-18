@@ -319,5 +319,95 @@ class JudgeAnswers(unittest.TestCase):
         self.assertIn("Judged 3 sessions. 1 got no answer", jd.JOB["message"])
 
 
+class TurnedOff(unittest.TestCase):
+    """A wrong mark can be turned off, with a reason, and turned back on; the judge reads the user's own rules."""
+
+    def setUp(self):
+        self.keep, self.tmp = hd.DATA, tempfile.TemporaryDirectory()
+        hd.DATA = self.tmp.name
+        self.files = [{"rules": [{"id": "f#a", "title": "Stay short"}, {"id": "g#a", "title": "Steps"}, {"id": "h#a", "title": "Steps"}]}]
+        self.st = {"sessions": {"abc123": {"at": "T1", "marks": [{"rule": "f#a", "verdict": "fail", "claude": "a long reply"},
+                                                                  {"rule": "g#a", "verdict": "fail", "claude": "x"}, {"rule": "h#a", "verdict": "fail", "claude": "y"}],
+                                           "uncovered": [{"topic": "pictures not looked at", "line": "l"}]}}}
+
+    def tearDown(self):
+        hd.DATA = self.keep
+        self.tmp.cleanup()
+
+    def test_off_needs_a_reason_and_on_undoes_it(self):
+        self.assertIn("--why", jd.turn_off(self.st, self.files, "abc", "stay short", ""))
+        self.assertEqual(jd.load_off(), {})
+        self.assertIn("Turned off: f#a", jd.turn_off(self.st, self.files, "abc", "Stay short", "the user asked for detail"))
+        self.assertEqual(jd.load_off()["abc123 f#a"]["why"], "the user asked for detail")
+        self.assertIn("Turned back on", jd.turn_off(self.st, self.files, "abc", "f#a", "", restore=True))
+        self.assertEqual(jd.load_off(), {})
+
+    def test_what_cant_be_found_says_why(self):
+        self.assertIn("No judged session", jd.turn_off(self.st, self.files, "zzz", "f#a", "w"))
+        self.assertIn("More than one rule", jd.turn_off(self.st, self.files, "abc", "Steps", "w"))  # two rules share the title
+        self.assertIn("no bad mark", jd.turn_off(self.st, self.files, "abc", "nothing", "w"))
+
+    def test_a_problem_nothing_covers_can_be_turned_off_too(self):
+        self.assertIn("gap:pictures not looked at", jd.turn_off(self.st, self.files, "abc", "Pictures not looked at", "one-off"))
+
+    def test_it_holds_for_the_same_judging_or_the_same_words(self):
+        jd.turn_off(self.st, self.files, "abc", "f#a", "w")
+        self.st["sessions"]["abc123"]["marks"] = []  # judged again without that mark: the old turn-off can still be taken out
+        self.assertIn("Turned back on", jd.turn_off(self.st, self.files, "abc", "f#a", "", restore=True))
+        self.st["sessions"]["abc123"]["marks"] = [{"rule": "f#a", "verdict": "fail", "claude": "a long reply"}]
+        jd.turn_off(self.st, self.files, "abc", "f#a", "w")
+        off = jd.load_off()
+        self.assertTrue(jd.is_off(off, "abc123", "f#a", {"at": "T1"}, "other words"))
+        self.assertTrue(jd.is_off(off, "abc123", "f#a", {"at": "T2"}, "a long reply"))   # judged again, the same words quoted
+        self.assertFalse(jd.is_off(off, "abc123", "f#a", {"at": "T2"}, "a new reply"))   # judged again, a new moment
+
+    def test_the_judge_is_told_the_users_rules(self):
+        self.assertEqual(jd.instructions(), jd.INSTRUCTIONS)  # no file, nothing added
+        with open(hd.judge_rules_path(), "w") as fh:
+            fh.write("# Rules for the judge\n\nNothing yet.\n")
+        self.assertEqual(jd.instructions(), jd.INSTRUCTIONS)  # a file with no rule in it adds nothing
+        with open(hd.judge_rules_path(), "w") as fh:
+            fh.write("- **A setup line names its file.** That isn't detail.\n")
+        self.assertIn("A setup line names its file", jd.instructions())
+        self.assertEqual(hd.row_of(hd.judge_rules_path()), ("global", "judge", "judge rules"))
+
+    def test_the_judge_card_and_its_count_starting_again(self):
+        card = doc.judge_card()
+        self.assertEqual(card["rules"][0]["id"], doc.WRONG)
+        self.assertIn("Built into the plugin", {r["group"] for r in card["rules"]})
+        card["versions"] = [{"v": 1, "when": "", "text": ""}, {"v": 2, "when": "Nov 19", "text": "- **A.** one\n"}]
+        of, _ = doc.rule_epochs(card)
+        self.assertEqual(of[doc.WRONG], [1, 2])  # an edit of the judge's rules starts the count of wrong marks again
+
+
+class OwnSkills(unittest.TestCase):
+    def test_the_doctors_own_skill_keeps_each_text_it_has_seen(self):
+        keep, tmp = hd.DATA, tempfile.TemporaryDirectory()
+        hd.DATA = tmp.name
+        try:
+            p = os.path.join(tmp.name, "SKILL.md")
+            with open(p, "w") as fh:
+                fh.write("one")
+            self.assertEqual(hd.own_skill_row(p, "fix")["versions"], [])
+            with open(p, "w") as fh:
+                fh.write("two")
+            row = hd.own_skill_row(p, "fix")
+            self.assertEqual((row["base"], [v["text"] for v in row["versions"]]), ("one", ["two"]))
+            self.assertEqual(len(hd.own_skill_row(p, "fix")["versions"]), 1)  # seen again unchanged: no new version
+            hd.READ_ONLY = True
+            with open(p, "w") as fh:
+                fh.write("three")
+            hd.own_skill_row(p, "fix")  # a report reads it and records nothing
+            hd.READ_ONLY = False
+            with open(p, "w") as fh:
+                fh.write("two")
+            self.assertEqual(len(hd.own_skill_row(p, "fix")["versions"]), 1)
+            self.assertEqual(hd.own_skill(os.path.join(hd.PLUGIN, "skills", "fix", "SKILL.md")), "fix")
+            self.assertIsNone(hd.own_skill(hd.CLAUDE + "/skills/fix/SKILL.md"))
+        finally:
+            hd.DATA = keep
+            tmp.cleanup()
+
+
 if __name__ == "__main__":
     unittest.main()

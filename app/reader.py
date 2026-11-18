@@ -25,6 +25,11 @@ DATA = os.environ.get("HARNESS_DOCTOR_DATA") or os.environ.get("CLAUDE_PLUGIN_DA
 def data_path(name):
     os.makedirs(DATA, exist_ok=True)
     return os.path.join(DATA, name)
+
+
+def judge_rules_path():
+    """The user's own rules for the judge: a file in the data folder, so a plugin update leaves it alone."""
+    return os.path.join(DATA, "judge-rules.md")
 WINDOW_DAYS = 30
 TS = re.compile(r'"timestamp"\s*:\s*"([^"]+)"')
 CWD = re.compile(r'"cwd"\s*:\s*"([^"]+)"')
@@ -40,6 +45,8 @@ def one_line(text, n=220):
 def row_of(path):
     """(scope, kind, name) when the path is a CLAUDE.md, a SKILL.md, an output style or a note in the domain knowledge, else None.
     scope is "global" for ~/.claude, else the folder that holds the project's CLAUDE.md / .claude."""
+    if path and path == judge_rules_path():  # the user's rules for the judge, kept with the doctor's own data
+        return "global", "judge", "judge rules"
     if not path or not path.startswith("/") or path.startswith("/tmp/"):
         return None
     g = CLAUDE + "/"
@@ -479,8 +486,47 @@ def scan():
             "events": {p: [e for e in evs if e["t"] >= cutoff] for p, evs in events.items()}, "snaps": snaps, "cutoff": cutoff, "rows": {}}
 
 
+PLUGIN = os.path.dirname(HERE)  # the doctor's own folder
+
+
+def own_skill(path):
+    """The name of one of the doctor's own skills ("fix") when the path is its SKILL.md, else None."""
+    m = re.fullmatch(re.escape(PLUGIN) + r"/skills/([^/]+)/SKILL\.md", path or "")
+    return m.group(1) if m else None
+
+
+READ_ONLY = False  # set for a report or a turn-off: those read the plugin's skills and record nothing
+
+
+def own_skill_row(path, name):
+    """The versions of one of the doctor's own skills. The logs never show them change (a plugin update swaps the whole
+    folder, under a new path), so the doctor keeps each text it has seen, with when it first saw it, in its data folder.
+    The first text counts from when the file was made (the install), so older sessions aren't judged against it.
+    The installed plugin and a copy run from its repo keep separate lists, so switching between them makes no versions."""
+    store = data_path("own-skills.json")
+    seen = load_json(store, {})
+    key = name if "/plugins/cache/" in path or path.startswith(DATA) else name + "@" + os.path.dirname(os.path.dirname(os.path.dirname(path)))
+    mine, text = seen.setdefault(key, []), read(path)
+    if text is not None and (not mine or mine[-1]["text"] != text):
+        t = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime())
+        mine.append({"t": (born(path) + ".000Z" if born(path) else t) if not mine else t, "text": text})
+        if not READ_ONLY:
+            save_json(store, seen)
+    if not mine:
+        return None
+    versions, clusters = [], []
+    for a, b in zip(mine, mine[1:]):
+        what = "The plugin's skill changed (an update, or an edit in its folder)."
+        versions.append({"t": b["t"], "kind": "rewrite", "session": "plugin:" + b["t"], "what": what, "diff": udiff(a["text"], b["text"]), "text": b["text"]})
+        clusters.append({"session": "plugin:" + b["t"], "start": b["t"], "end": b["t"], "edits": 1, "diff": udiff(a["text"], b["text"]), "new": False, "text": b["text"], "what": what})
+    return {"id": path, "path": path.replace(HOME, "~", 1), "scope": "global", "kind": "skill", "name": "harness-doctor:" + name,
+            "created": mine[0]["t"], "base": mine[0]["text"], "versions": versions, "clusters": clusters}
+
+
 def row(sc, path):
     """The versions of one file (see build_row), built once per scan. None when the file isn't one the reader follows."""
+    if path not in sc["rows"] and own_skill(path) and os.path.isfile(path):
+        sc["rows"][path] = own_skill_row(path, own_skill(path))
     if path not in sc["rows"]:
         if not (os.path.isfile(path) and row_of(path)):
             sc["rows"][path] = None

@@ -20,7 +20,10 @@ You write a CLAUDE.md, skills, an output style and notes, then keep tweaking the
 - **Not covered yet:** problems seen in 2 or more sessions that nothing you wrote is about, as the last card of their group.
 - **Groups by scope:** "Everything" first, then what's shared, then a project when you pick it. The picker lists the projects you worked in during the last 7 days, then "Show all". Files with no marks fold away.
 - **Judge N new sessions:** judges your newest unjudged sessions, 10 per press, all at the same time.
-- **Copy fix prompt:** copies `/harness-doctor:fix`. Paste it into Claude Code and the `fix` skill goes through every regression, failing rule and uncovered problem, worst first and one at a time. Last, it checks why the unused rules never came up, and whether each should be removed. Fixing takes a conversation, so the page doesn't suggest edits, and nothing from that conversation is fed back to the judge.
+- **Copy fix prompt:** copies `/harness-doctor:fix`. Paste it into Claude Code and the `fix` skill goes through every regression, failing rule and uncovered problem, worst first and one at a time. Last, it checks why the unused rules never came up, and whether each should be removed. Fixing takes a conversation, so the page doesn't suggest edits.
+- **Wrong marks:** the judge is a model, so some bad marks are wrong. In the fix conversation, after your yes, a wrong mark is turned off with its reason. It stays on the page, struck through, with the reason on hover and a count on the card ("1 turned off"), and no longer counts against its rule. A problem nothing covers can be turned off the same way; it needs 2 sessions, so it leaves the page when fewer are left.
+- **The judge's own card,** "judge rules": the marks turned off as wrong are the judge's bad marks, counted from the last edit of its rules. Under them are your rules for the judge (`judge-rules.md` in the data folder: one bullet per kind of moment it keeps misreading, added by the fix skill after your yes, or by hand) and the instructions built into the plugin. Your rules are added to every later judge run.
+- **The plugin's own skills** (`harness-doctor:fix`, `harness-doctor:open`) have cards too, judged like your skills. The doctor keeps each text of them it has seen, so their marks survive a plugin update where a step didn't change.
 
 ## Your knowledge files
 
@@ -50,7 +53,7 @@ Without the plugin:
 
 ```
 python3 app/harness_doctor.py            # opens http://127.0.0.1:8737
-python3 app/harness_doctor.py --help     # --port, --data, --no-open, --background, --stop, --report
+python3 app/harness_doctor.py --help     # --port, --data, --no-open, --background, --stop, --report, --turn-off, --turn-on
 ```
 
 Needs Python 3.10 or later and the `claude` command on your PATH. There's nothing else to install.
@@ -66,7 +69,9 @@ It only calls Claude when you press **Judge N new sessions**, using your own Cla
 
 ## How far to trust the marks
 
-The marks are Claude's judgment, and they vary. Judging the same 4 sessions twice, 56% of the bad marks showed up both times; the rest were found in only one of the runs. Marks rarely contradict each other (a rule passing in one run and failing in the other), so read a red rule as "worth a look", not as a measurement. The `fix` skill checks each mark with you before changing anything.
+The marks are Claude's judgment, and they vary. Judging the same 4 sessions twice, 56% of the bad marks showed up both times; the rest were found in only one of the runs. Marks rarely contradict each other (a rule passing in one run and failing in the other), so read a red rule as "worth a look", not as a measurement. The `fix` skill checks each mark with you before changing anything, and turns a wrong one off only after your yes.
+
+Your rules for the judge change what later runs mark, and a rule that is too wide hides real failures: the page can't show a failure the judge no longer reports. Keep each one about a single kind of moment, and read the judge's card after adding one.
 
 ## Privacy
 
@@ -76,6 +81,7 @@ The marks are Claude's judgment, and they vary. Judging the same 4 sessions twic
 - To judge, it sends excerpts of your sessions and the text of your rules to Claude through `claude -p`, the same way any Claude Code session sends your messages. Those runs use no tools, and don't load your hooks or settings.
 - It never writes to your files; fixes happen in your own Claude Code session.
 - Its marks stay on your machine, in the plugin's data folder (`~/.claude/plugins/data/harness-doctor…/`, or `~/.local/share/harness-doctor` when run by hand). They're dropped after 30 days, and when you uninstall the plugin.
+- The list of marks turned off and your rules for the judge (`judge-rules.md`) live in that folder too, so keep a copy of `judge-rules.md` before uninstalling.
 
 ## How it works, and what can break
 
@@ -96,6 +102,9 @@ Other limits:
 - Edits Claude made through shell commands (`cat >`, `sed -i`) are read on a best-effort basis.
 - It looks at the last 30 days, the same window Claude Code keeps logs for.
 - Marks from version 1 aren't carried over.
+- A session judged again (because it grew) keeps a turned-off mark off only when the new mark quotes the same words.
+- The installed plugin and a copy run from its repo keep separate histories of the plugin's own skills.
+- Marks made before a rule for the judge was written stay as they are; only later runs follow it.
 
 ## Layout
 

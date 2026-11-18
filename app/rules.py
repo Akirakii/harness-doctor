@@ -18,6 +18,7 @@ SHORT = 8000  # a note up to this many characters is cut into facts; a longer do
 GENERAL = ("", "Shared", "Every project")  # the scopes that hold in every project
 IN_USE_DAYS = 7
 ALWAYS = ("rules", "output style")  # the kinds that load in every session
+PLUGIN = rd.PLUGIN  # the doctor's own folder: its skills are judged like the user's
 
 
 def slug(text):
@@ -177,6 +178,11 @@ def catalog(sc, s=None):
                 add(p, os.path.basename(os.path.dirname(p)), "skill", scope, text, load=description(text), load_group="When it loads")
 
     own_files(rd.CLAUDE, "")
+    for p in sorted(glob.glob(os.path.join(PLUGIN, "skills", "*", "SKILL.md"))):  # the doctor's own skills can fail too
+        text = then(p)
+        if text and description(text):
+            name = "harness-doctor:" + os.path.basename(os.path.dirname(p))  # the name a session loads it by
+            add(p, name, "skill", "", text, load=description(text), load_group="When it loads", display=name, label="skill · Harness Doctor")
     for name, folder in sorted(project_dirs(sc).items()):
         if os.path.isdir(folder) and (s is None or s["cwd"] == folder or s["cwd"].startswith(folder + "/")):
             own_files(folder, name)
