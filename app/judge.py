@@ -74,16 +74,45 @@ def load_store():
     return st
 
 
-def ask(prompt, model=MODEL, timeout=900):
-    """One headless Claude run: no tools, no hooks or user settings, nothing saved.
+# The user settings that say how Claude Code logs in and which server it talks to (a company gateway, Bedrock, Vertex,
+# a key helper). The judge skips the user's settings to leave out their hooks and rules, so these are handed over by name.
+LOGIN_KEYS = ("env", "apiKeyHelper", "awsAuthRefresh", "awsCredentialExport", "forceLoginMethod", "forceLoginOrgUUID")
+WHY = {"text": ""}  # why the last run got no answer, in Claude Code's own words
+
+
+def run_settings():
+    """The settings for a judge run: no auto memory, plus the login settings from the user's own settings files."""
+    out = {"autoMemoryEnabled": False}
+    for name in ("settings.json", "settings.local.json"):
+        user = rd.load_json(os.path.join(rd.CLAUDE, name), {})
+        for k in LOGIN_KEYS:
+            if k not in user:
+                continue
+            if k == "env" and isinstance(user[k], dict):
+                out["env"] = {**out.get("env", {}), **user[k]}
+            else:
+                out[k] = user[k]
+    return json.dumps(out)
+
+
+def ask(prompt, model=None, timeout=900):
+    """One headless Claude run: no tools, no hooks or user rules, nothing saved; only the user's login settings.
     -> (the JSON object it answered, or None when it didn't answer with one; the cost in dollars)"""
+    model = model or os.environ.get("HARNESS_DOCTOR_MODEL") or MODEL
     r = subprocess.run(["claude", "-p", "Check the session in the input against the rules, following the instructions in it.",
                         "--model", model, "--tools", "", "--no-session-persistence", "--setting-sources", "project",
-                        "--settings", '{"autoMemoryEnabled": false}', "--output-format", "json"],
+                        "--settings", run_settings(), "--output-format", "json"],
                        input=prompt, capture_output=True, text=True, timeout=timeout, cwd=HERE)
     try:
         j = json.loads(r.stdout)
     except ValueError:
+        WHY["text"] = rd.one_line((r.stderr or r.stdout or f"claude exited with code {r.returncode}").strip(), 200)
+        return None, 0.0
+    if not isinstance(j, dict):
+        WHY["text"] = "claude answered in a format Harness Doctor doesn't know"
+        return None, 0.0
+    if j.get("is_error"):  # not logged in, no access to the model, the server can't be reached
+        WHY["text"] = rd.one_line(str(j.get("result") or "claude reported an error"), 200)
         return None, 0.0
     m = re.search(r"\{.*\}", j.get("result", "") or "", re.S)
     try:
@@ -160,6 +189,7 @@ def run(scan):
     """The page's button: judge the next batch of sessions, saving after each one, so a stop loses nothing."""
     try:
         JOB.update(state="running", message="Finding sessions to judge…", pct=None)
+        WHY["text"] = ""
         sc, st = scan(), load_store()
         todo = pending(sc, st)[:BATCH]
         done = failed = 0
@@ -176,6 +206,8 @@ def run(scan):
         msg = f"Judged {done} {'session' if done == 1 else 'sessions'}." if todo else "Nothing new to judge."
         if failed:
             msg += f" {failed} got no answer from Claude and will be tried again."
+            if WHY["text"]:
+                msg += f" Claude Code said: {WHY['text']}"
         if left:
             msg += f" {left} more to go."
         JOB.update(state="done", pct=100, message=msg)

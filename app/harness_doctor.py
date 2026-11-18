@@ -198,7 +198,7 @@ def page_data(sc, st):
 
 def report(project=""):
     """What is failing, worst first, as text for a Claude Code conversation: regressions, then failing rules, then the
-    problems nothing covers. `project` adds that project's group to the general ones."""
+    problems nothing covers, then the rules that never came up. `project` adds that project's group to the general ones."""
     sc = rd.scan()
     d = page_data(sc, jd.load_store())
     logs = {s["id"]: s["log"] for s in sc["sessions"]}
@@ -237,8 +237,32 @@ def report(project=""):
             out += [f"- {m['when']}, {m['project']}: {m['line']}"] + ([f"  - you: {m['you']}"] if m.get("you") else []) + [f"  - session log: {logs.get(m['sid'], '?')}"]
         out += [""]
     if not rows and not gaps:
-        out += ["Nothing is failing in the sessions judged so far." if d["judged"] else "No sessions are judged yet. Open the page and press the judge button first."]
+        out += ["Nothing is failing in the sessions judged so far." if d["judged"] else "No sessions are judged yet. Open the page and press the judge button first.", ""]
+    out += unused(d, show)
     return "\n".join(out)
+
+
+def unused(d, show, cap=12):
+    """The rules with no mark at all, on any wording: their moment never came up in the sessions judged. One line per file."""
+    if not d["judged"]:
+        return []
+    marked = {m["rule"] for m in d["moments"]}
+    lines, total = [], 0
+    for f in d["files"]:
+        idle = [r["title"] for r in f["rules"] if r["id"] not in marked] if show(f["scope"]) else []
+        if not idle:
+            continue
+        total += len(idle)
+        where = f"{f['path']} ({f['label']}" + (f", {f['scope']}" if f["scope"] else "") + ")"
+        if len(idle) == len(f["rules"]):
+            lines += [f"- {where}: none of its {len(idle)} rules came up"]
+        else:
+            more = f"; and {len(idle) - cap} more" if len(idle) > cap else ""
+            lines += [f"- {where}: {len(idle)} of {len(f['rules'])} never came up: " + "; ".join(idle[:cap]) + more]
+    if not lines:
+        return []
+    return [f"## Unused: {total} rules never came up in the {d['judged']} sessions judged",
+            "No good use and no bad use, on any wording. Each is either dead weight or a rule the judge can't see.", *lines, ""]
 
 
 CACHE = {"at": 0.0, "body": None}

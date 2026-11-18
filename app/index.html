@@ -362,6 +362,17 @@ main{padding-bottom:130px}
 #jmsg{color:var(--soft);font-size:15px}
 #dock{justify-items:end}
 #msg{position:static;max-width:300px}
+
+/* ---- a long row of tiles scrolls sideways, and fades out on the side that has more ---- */
+.rr .marks{flex:0 1 auto;min-width:0;max-width:55%;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;padding:4px;margin:-4px -4px -4px auto;--fl:0px;--fr:0px;-webkit-mask-image:linear-gradient(to right,transparent 0,#000 var(--fl),#000 calc(100% - var(--fr)),transparent 100%);mask-image:linear-gradient(to right,transparent 0,#000 var(--fl),#000 calc(100% - var(--fr)),transparent 100%)}
+.rr .marks::-webkit-scrollbar{display:none}
+.marks .vsep{flex:none;position:relative;align-self:stretch;min-height:22px;width:14px;margin:0;padding:0;border:none}
+.marks .vsep::before{content:"";position:absolute;left:6px;top:2px;bottom:2px;width:2px;border-radius:2px;background:color-mix(in srgb,var(--soft) 45%,transparent)}
+.marks .vlat{flex:none;font:700 11px Nunito,system-ui,sans-serif;color:var(--soft);margin-right:2px}
+.marks .old{opacity:.5}.marks .old:hover,.marks .old.pin{opacity:1}
+.marks.scrolls,.marks.scrolls button{cursor:grab}.marks.dragging,.marks.dragging button{cursor:grabbing}
+.marks{user-select:none}
+.rr.sliding{background:var(--bg)}.rr.sliding .marks{display:flex}.rr.sliding>.st,.rr.sliding>.sm{display:none}
 </style>
 </head>
 <body>
@@ -436,8 +447,8 @@ main{padding-bottom:130px}
     const x = h("button", (m.verdict === "ok" ? "ok" : m.verdict === "miss" ? "miss" : "x") + (m.wrong ? " off" : ""), GLYPH[m.verdict]);
     x.type = "button";
     x.setAttribute("aria-label", HEAD[m.verdict] + ": " + m.line);
-    x.addEventListener("mouseenter", e => { if (!pinned) { fillTip(m, rule); placeTip(e.clientX, e.clientY); } });
-    x.addEventListener("mousemove", e => { if (!pinned) placeTip(e.clientX, e.clientY); });
+    x.addEventListener("mouseenter", e => { if (!pinned && !drag) { fillTip(m, rule); placeTip(e.clientX, e.clientY); } });
+    x.addEventListener("mousemove", e => { if (!pinned && !drag) placeTip(e.clientX, e.clientY); });
     x.addEventListener("mouseleave", () => { if (!pinned) tip.hidden = true; });
     x.addEventListener("click", e => {
       e.stopPropagation();
@@ -487,15 +498,62 @@ main{padding-bottom:130px}
     if (!out.children.length) { const k = cnt("good") ? "good" : "none"; out.append(h("span", "sm " + k, STATUS[k])); }
     return out;
   }
+  // A long row of tiles: press and drag slides it sideways, and the side that has more tiles fades out.
+  const FADE = 36;
+  function fade(el) {
+    const more = el.scrollWidth - el.clientWidth - el.scrollLeft;
+    el.style.setProperty("--fl", el.scrollLeft > 1 ? FADE + "px" : "0px");
+    el.style.setProperty("--fr", more > 1 ? FADE + "px" : "0px");
+    el.classList.toggle("scrolls", el.scrollWidth > el.clientWidth + 1);
+  }
+  const shown = new ResizeObserver(es => { for (const e of es) fade(e.target); });  // the tiles only take up room while the mouse is on the row
+  let drag = null;  // the row being slid: {el, x, left, moved}
+  function scrolls(el) {
+    el.addEventListener("scroll", () => fade(el), {passive: true});
+    el.addEventListener("mousedown", e => {
+      if (e.button !== 0 || el.scrollWidth <= el.clientWidth + 1) return;
+      drag = {el, x: e.clientX, left: el.scrollLeft, moved: false};
+      e.preventDefault();  // no text selection, no focus jump while sliding
+    });
+    el.addEventListener("click", e => { if (el.dataset.slid) { e.stopPropagation(); e.preventDefault(); delete el.dataset.slid; } }, true);  // a slide isn't a click on a tile
+    shown.observe(el);
+    return el;
+  }
+  document.addEventListener("mousemove", e => {
+    if (!drag) return;
+    const dx = e.clientX - drag.x;
+    if (!drag.moved && Math.abs(dx) < 4) return;
+    if (!drag.moved) {  // the row stays open while it slides, even if the mouse leaves it
+      drag.moved = true; drag.el.classList.add("dragging"); drag.el.closest(".rr").classList.add("sliding");
+      if (!pinned) tip.hidden = true;
+    }
+    drag.el.scrollLeft = drag.left - dx;
+  });
+  document.addEventListener("mouseup", () => {
+    if (!drag) return;
+    const el = drag.el;
+    if (drag.moved) { el.dataset.slid = "1"; setTimeout(() => { delete el.dataset.slid; }, 0); }
+    el.classList.remove("dragging"); el.closest(".rr").classList.remove("sliding");
+    drag = null;
+  });
   function marksOf(f, r) {  // the rule's marks, newest wording first; they show while the mouse is on the rule
     const out = h("span", "marks"), eps = [...r.epochs].reverse(), mine = MOMENTS.filter(m => m.rule === r.id);
     const with_ = eps.filter(ep => mine.some(m => m.e === ep.e)), last = eps[0].e;
     for (const ep of with_) {  // an older wording is named by the day it was replaced
       const next = r.epochs.find(x => x.e === ep.e + 1);
-      if (ep.e !== last || with_.length > 1) out.append(h("span", "vsep" + (out.children.length ? "" : " first"), ep.e === last ? "latest" : "before " + (next ? next.when : "")));
-      for (const m of mine.filter(m => m.e === ep.e)) out.append(tile(m, r));
+      const old = ep.e !== last;
+      if (!out.children.length && old) out.append(h("span", "vlat", "no data on latest"));  // only older wordings have marks
+      if (!old && with_.length > 1) out.append(h("span", "vlat", "latest"));  // only the newest wording keeps its word
+      if (old) {
+        const sep = h("span", "vsep"), say = "before " + (next ? next.when : "");
+        sep.addEventListener("mouseenter", e => { if (!pinned && !drag) { tip.replaceChildren(h("div", null, say)); tip.hidden = false; placeTip(e.clientX, e.clientY); } });
+        sep.addEventListener("mousemove", e => { if (!pinned && !drag) placeTip(e.clientX, e.clientY); });
+        sep.addEventListener("mouseleave", () => { if (!pinned) tip.hidden = true; });
+        out.append(sep);
+      }  // a line, no words: the date shows on hover
+      for (const m of mine.filter(m => m.e === ep.e)) { const t = tile(m, r); if (old) t.classList.add("old"); out.append(t); }
     }
-    return out;
+    return scrolls(out);
   }
   // ---------- History: the file's edits, newest first, each with what it did to the rules ----------
   const ruleOpen = new Set();
@@ -655,7 +713,7 @@ main{padding-bottom:130px}
     const body = h("div", "rl"), list = h("div", "gl");
     list.style.marginTop = "10px";
     for (const g of gaps) {
-      const row = h("div", "rr"), marks = h("span", "marks");
+      const row = h("div", "rr"), marks = scrolls(h("span", "marks"));
       for (const m of g.moments) marks.append(tile(m, null));  // the tiles show while the mouse is on the problem
       row.append(h("span", "dot d-gap"), h("span", "tname", g.topic), marks, h("span", "sm none", g.moments.length + " sessions"));
       list.append(row);
@@ -714,6 +772,8 @@ main{padding-bottom:130px}
     if (n("worse")) parts.push(n("worse") + (n("worse") === 1 ? " regression" : " regressions"));
     if (n("bad")) parts.push(n("bad") + " failing " + (n("bad") === 1 ? "rule" : "rules"));
     if (gaps) parts.push(gaps + " not covered yet");
+    const seen = new Set(MOMENTS.map(m => m.rule)), idle = FILES.filter(f => inView(f.scope || "")).flatMap(f => f.rules).filter(r => !seen.has(r.id)).length;
+    if (idle && JUDGED) parts.push(idle + (idle === 1 ? " unused rule" : " unused rules"));
     const cmd = "/harness-doctor:fix" + (pick && pick !== "*" ? " " + pick : "");
     try { await navigator.clipboard.writeText(cmd); $("fixall").textContent = "Copied ✓"; } catch (e) { $("fixall").textContent = cmd; }
     $("msg").textContent = parts.length

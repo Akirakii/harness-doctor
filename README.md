@@ -20,7 +20,7 @@ You write a CLAUDE.md, skills, an output style and notes, then keep tweaking the
 - **Not covered yet:** problems seen in 2 or more sessions that nothing you wrote is about, as the last card of their group.
 - **Groups by scope:** "Everything" first, then what's shared, then a project when you pick it. The picker lists the projects you worked in during the last 7 days, then "Show all". Files with no marks fold away.
 - **Judge N new sessions:** judges your newest unjudged sessions, 10 per press.
-- **Copy fix prompt:** copies `/harness-doctor:fix`. Paste it into Claude Code and the `fix` skill goes through every regression, failing rule and uncovered problem, worst first and one at a time. Fixing takes a conversation, so the page doesn't suggest edits, and nothing from that conversation is fed back to the judge.
+- **Copy fix prompt:** copies `/harness-doctor:fix`. Paste it into Claude Code and the `fix` skill goes through every regression, failing rule and uncovered problem, worst first and one at a time. Last, it checks why the unused rules never came up, and whether each should be removed. Fixing takes a conversation, so the page doesn't suggest edits, and nothing from that conversation is fed back to the judge.
 
 ## Your knowledge files
 
@@ -72,6 +72,7 @@ The marks are Claude's judgment, and they vary. Judging the same 4 sessions twic
 
 - The server only listens on `127.0.0.1`, and rejects requests that come from other sites.
 - The page loads nothing from the internet; its fonts ship with the plugin.
+- A judge run skips your user settings, apart from the ones that say how Claude Code logs in (`env`, `apiKeyHelper`, the AWS helpers), so it works behind a company gateway, Bedrock or Vertex. `HARNESS_DOCTOR_MODEL` picks another model than Sonnet. When a run gets no answer, the page shows what Claude Code said.
 - To judge, it sends excerpts of your sessions and the text of your rules to Claude through `claude -p`, the same way any Claude Code session sends your messages. Those runs use no tools, and don't load your hooks or settings.
 - It never writes to your files; fixes happen in your own Claude Code session.
 - Its marks stay on your machine, in the plugin's data folder (`~/.claude/plugins/data/harness-doctor…/`, or `~/.local/share/harness-doctor` when run by hand). They're dropped after 30 days, and when you uninstall the plugin.
