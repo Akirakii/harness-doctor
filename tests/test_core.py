@@ -285,6 +285,39 @@ class JudgeAnswers(unittest.TestCase):
         finally:
             hd.live_sessions = live
 
+    def test_new_names_take_an_existing_name_and_chains_end_at_the_last(self):
+        to = jd.renames([{"new": "b", "use": "a"}, {"new": "c", "use": "b"}, {"new": "a", "use": "c"},   # a is known: never renamed
+                         {"new": "d", "use": "nowhere"}, {"new": "e", "use": "f"}, {"new": "f", "use": "e"}, "junk"],
+                        {"b", "c", "d", "e", "f"}, {"a"})
+        self.assertEqual(to, {"b": "a", "c": "a"})
+        entries = [{"uncovered": [{"topic": "b", "line": "1"}, {"topic": "c", "line": "2"}, {"topic": "d", "line": "3"}]}, {}]
+        jd.rename(entries, to)
+        self.assertEqual([(u["topic"], u["line"]) for u in entries[0]["uncovered"]], [("a", "1"), ("d", "3")])
+
+    def test_a_press_judges_every_session_and_tries_a_failed_one_again(self):
+        sessions = [{"id": f"s{i}", "n": 5} for i in range(4)]
+        calls, saved = [], []
+        def judge(sc, s, topics):
+            calls.append(s["id"])
+            if s["id"] == "s1" and calls.count("s1") == 1:
+                return None  # no answer the first time
+            if s["id"] == "s3":
+                return None  # never answers
+            return {"at": "2026-11-19T10:00", "n": 5, "marks": [], "uncovered": [{"topic": "new " + s["id"], "line": "x"}]}
+        def ask(prompt, **kw):
+            return {"same": [{"new": "new s2", "use": "new s0"}]}, 0.0
+        keep = (jd.judge_session, jd.ask, jd.load_store, hd.save_json, hd.live_sessions)
+        jd.judge_session, jd.ask, jd.load_store, hd.live_sessions = judge, ask, lambda: {"sessions": {}}, lambda: set()
+        hd.save_json = lambda path, st: saved.append(sorted(st["sessions"]))
+        try:
+            jd.run(lambda: {"sessions": sessions})
+        finally:
+            jd.judge_session, jd.ask, jd.load_store, hd.save_json, hd.live_sessions = keep
+        self.assertEqual(jd.JOB["state"], "done", jd.JOB["message"])
+        self.assertEqual(sorted(calls), ["s0", "s1", "s1", "s2", "s3", "s3"])
+        self.assertEqual(saved[-1], ["s0", "s1", "s2"])
+        self.assertIn("Judged 3 sessions. 1 got no answer", jd.JOB["message"])
+
 
 if __name__ == "__main__":
     unittest.main()

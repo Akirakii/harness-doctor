@@ -3,18 +3,21 @@
 Did the rule's moment come up in the session, and was it followed? The answers (pass, fail, unknown) are the marks the
 page shows. It calls `claude -p` with your own login, only when you press the button, and keeps the marks in the data
 folder for 30 days. Nothing judged here is fed back into a later run, apart from the names of the uncovered problems
-found so far, so the same problem keeps one name.
+found so far, so the same problem keeps one name. The sessions of one press are judged at the same time, so a last
+small run gives the problems they found the same name where they are the same problem.
 """
 import json
 import os
 import re
 import subprocess
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import reader as rd
 import rules as rl
 
 BATCH = 10            # sessions judged per press, newest first
+PARALLEL = 10         # how many of them are judged at the same time
 COST_PER_SESSION = 0.30  # dollars on Sonnet: 24 to 35 cents measured on 5 sessions on 2026-11-16; only used to say "about $X" on the button
 MODEL = "sonnet"
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -95,14 +98,21 @@ def run_settings():
     return json.dumps(out)
 
 
-def ask(prompt, model=None, timeout=900):
+CHECK = "Check the session in the input against the rules, following the instructions in it."
+
+
+def ask(prompt, model=None, timeout=900, task=CHECK):
     """One headless Claude run: no tools, no hooks or user rules, nothing saved; only the user's login settings.
     -> (the JSON object it answered, or None when it didn't answer with one; the cost in dollars)"""
     model = model or os.environ.get("HARNESS_DOCTOR_MODEL") or MODEL
-    r = subprocess.run(["claude", "-p", "Check the session in the input against the rules, following the instructions in it.",
-                        "--model", model, "--tools", "", "--no-session-persistence", "--setting-sources", "project",
-                        "--settings", run_settings(), "--output-format", "json"],
-                       input=prompt, capture_output=True, text=True, timeout=timeout, cwd=HERE)
+    try:
+        r = subprocess.run(["claude", "-p", task,
+                            "--model", model, "--tools", "", "--no-session-persistence", "--setting-sources", "project",
+                            "--settings", run_settings(), "--output-format", "json"],
+                           input=prompt, capture_output=True, text=True, timeout=timeout, cwd=HERE)
+    except subprocess.TimeoutExpired:  # one slow run doesn't stop the others
+        WHY["text"] = f"claude gave no answer in {timeout // 60} minutes"
+        return None, 0.0
     try:
         j = json.loads(r.stdout)
     except ValueError:
@@ -185,23 +195,98 @@ def pending(sc, st):
     return out
 
 
+SAME = """Below are short names of problems found in Claude Code sessions. `known` are the names already in use, `new` are
+names that were just given, each with one line saying what went wrong.
+
+For each new name that is the same problem as a known name, or as another new name, say which name it takes. The same
+problem means the same thing went wrong, not only the same subject. When you aren't sure, leave it out. Take a known
+name when one fits; between two new names, take the clearer one.
+
+Answer with only this JSON, copying the names exactly:
+{"same": [{"new": "<a new name>", "use": "<the name it takes>"}]}"""
+
+
+def renames(same, new, known):
+    """Clean the judge's answer -> {new name: the name it takes}. Only new names are renamed, only to a name that
+    exists, and a chain (a takes b, b takes c) ends at its last name."""
+    to = {}
+    for x in same if isinstance(same, list) else []:
+        if isinstance(x, dict) and x.get("new") in new and x.get("use") in new | known and x["new"] != x["use"]:
+            to.setdefault(x["new"], x["use"])
+    out = {}
+    for a in to:
+        b, seen = to[a], {a}
+        while b in to and b not in seen:
+            seen.add(b)
+            b = to[b]
+        if b not in seen:  # a circle of names is left alone
+            out[a] = b
+    return out
+
+
+def rename(entries, to):
+    """Give the uncovered problems of these sessions their new names, and keep one per name in a session."""
+    for e in entries:
+        kept = {}
+        for u in e.get("uncovered", []):
+            u["topic"] = to.get(u["topic"], u["topic"])
+            kept.setdefault(u["topic"], u)
+        e["uncovered"] = list(kept.values())
+
+
+def same_names(entries, before):
+    """The sessions of one press were judged at the same time, so none saw the names the others gave. One small run
+    over the names alone finds the ones that are the same problem. `before`: the names known before this press."""
+    known = {t["topic"] for t in before}
+    new = {}
+    for e in entries:
+        for u in e.get("uncovered", []):
+            if u["topic"] not in known:
+                new.setdefault(u["topic"], u["line"])
+    if not new or len(new) + len(known) < 2:
+        return
+    ans, _ = ask(SAME + "\n\n" + json.dumps({"known": before, "new": [{"topic": k, "line": v} for k, v in new.items()]}, ensure_ascii=False),
+                 timeout=180, task="Find the names in the input that are the same problem, following the instructions in it.")
+    if ans:
+        rename(entries, renames(ans.get("same"), set(new), known))
+
+
 def run(scan):
-    """The page's button: judge the next batch of sessions, saving after each one, so a stop loses nothing."""
+    """The page's button: judge the next batch of sessions, all at the same time, saving each one as it comes back, so
+    a stop loses nothing. The ones that got no answer are tried once more, one at a time (a rate limit hits them all
+    together), and last the problems the batch found get the same name where they are the same problem."""
     try:
         JOB.update(state="running", message="Finding sessions to judge…", pct=None)
         WHY["text"] = ""
         sc, st = scan(), load_store()
         todo = pending(sc, st)[:BATCH]
-        done = failed = 0
-        for i, s in enumerate(todo):
-            JOB.update(message=f"Judging session {i + 1} of {len(todo)}…", pct=round(100 * i / len(todo)))
-            entry = judge_session(sc, s, known_topics(st))
+        before, got, again = known_topics(st), [], []
+
+        def keep(s, entry):
             if entry is None:
-                failed += 1  # no answer came back: it stays unjudged
-                continue
+                return False
             st["sessions"][s["id"]] = entry
+            got.append(entry)
             rd.save_json(store_path(), st)
-            done += 1
+            return True
+
+        if todo:
+            JOB.update(message=f"Judging {len(todo)} {'session' if len(todo) == 1 else 'sessions'} at the same time…", pct=0)
+            with ThreadPoolExecutor(max_workers=PARALLEL) as pool:
+                runs = {pool.submit(judge_session, sc, s, before): s for s in todo}
+                for i, f in enumerate(as_completed(runs)):  # saved here, in this one thread
+                    if not keep(runs[f], f.result()):
+                        again.append(runs[f])
+                    JOB.update(message=f"Judged {i + 1} of {len(todo)} sessions…", pct=round(100 * (i + 1) / (len(todo) + 1)))
+        failed = 0
+        for i, s in enumerate(again):
+            JOB.update(message=f"Trying again the {len(again)} that got no answer: {i + 1} of {len(again)}…")
+            failed += not keep(s, judge_session(sc, s, known_topics(st)))
+        done = len(got)
+        if got:
+            JOB.update(message="Giving the same problem the same name…")
+            same_names(got, before)
+            rd.save_json(store_path(), st)
         left = len(pending(sc, st))
         msg = f"Judged {done} {'session' if done == 1 else 'sessions'}." if todo else "Nothing new to judge."
         if failed:

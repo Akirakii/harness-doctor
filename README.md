@@ -19,7 +19,7 @@ You write a CLAUDE.md, skills, an output style and notes, then keep tweaking the
 - **Files that load on a trigger** are judged in two parts: the line that loads them (a skill's description, a note's "read when") and what they say. "Didn't load" means the moment came up and the file stayed closed.
 - **Not covered yet:** problems seen in 2 or more sessions that nothing you wrote is about, as the last card of their group.
 - **Groups by scope:** "Everything" first, then what's shared, then a project when you pick it. The picker lists the projects you worked in during the last 7 days, then "Show all". Files with no marks fold away.
-- **Judge N new sessions:** judges your newest unjudged sessions, 10 per press.
+- **Judge N new sessions:** judges your newest unjudged sessions, 10 per press, all at the same time.
 - **Copy fix prompt:** copies `/harness-doctor:fix`. Paste it into Claude Code and the `fix` skill goes through every regression, failing rule and uncovered problem, worst first and one at a time. Last, it checks why the unused rules never came up, and whether each should be removed. Fixing takes a conversation, so the page doesn't suggest edits, and nothing from that conversation is fed back to the judge.
 
 ## Your knowledge files
