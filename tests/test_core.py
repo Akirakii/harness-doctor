@@ -82,6 +82,13 @@ class Heredocs(unittest.TestCase):
         cmd = "cd ~/.claude/skills && cat > x/SKILL.md <<'EOF'\n---\nname: x\n$NOT_EXPANDED\nEOF\necho done"
         self.assertEqual(hd.heredoc_writes(cmd, None), [(hd.CLAUDE + "/skills/x/SKILL.md", "---\nname: x\n$NOT_EXPANDED\n")])
 
+    def test_a_folder_kept_in_a_variable_is_followed(self):
+        cmd = "DK=~/.claude/domain-knowledge; cd $DK\ncat > shared/INDEX.md <<'EOF'\n# Shared\nEOF\n"
+        self.assertEqual(hd.heredoc_writes(cmd, None), [(hd.CLAUDE + "/domain-knowledge/shared/INDEX.md", "# Shared\n")])
+        hits = hd.shell_targets('D="$HOME/.claude"; S=${D}/skills\necho hi > $S/x/SKILL.md', None)
+        self.assertEqual([(p, whole) for p, _, whole in hits], [(hd.CLAUDE + "/skills/x/SKILL.md", True)])
+        self.assertEqual(hd.shell_targets("F=$(mktemp); echo hi > $F", "/tmp/x"), [])
+
     def test_two_heredocs_in_one_command(self):
         cmd = "cat > ~/.claude/CLAUDE.md <<'A'\none\nA\ncat <<'B' > ~/.claude/skills/y/SKILL.md\ntwo\nB\n"
         self.assertEqual([t for _, t in hd.heredoc_writes(cmd, None)], ["one\n", "two\n"])

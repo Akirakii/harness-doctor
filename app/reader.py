@@ -74,8 +74,26 @@ def row_of(path):
     return None
 
 
-def resolve(token, cwd):
-    token = token.strip("'\"").replace("$HOME", HOME)
+ASSIGN = re.compile(r"""(?:^|[\s;&|])([A-Za-z_]\w*)=("[^"\n]*"|'[^'\n]*'|[^\s;&|'"]+)""")
+VAR = re.compile(r"\$(?:\{(\w+)\}|(\w+))")
+
+
+def shell_vars(cmd):
+    """The variables a piece of shell sets with a plain NAME=value (DK=~/.claude/domain-knowledge), so a path written
+    as $DK/x can be followed. A later value may use an earlier name; a value the shell computes ($(…)) is left out."""
+    env = {}
+    for name, value in ASSIGN.findall(cmd):
+        value = VAR.sub(lambda m: env.get(m.group(1) or m.group(2), m.group(0)), value.strip("'\""))
+        if "$(" not in value and "`" not in value:
+            env[name] = value
+    return env
+
+
+def resolve(token, cwd, env=None):
+    token = token.strip("'\"")
+    if env:
+        token = VAR.sub(lambda m: env.get(m.group(1) or m.group(2), m.group(0)), token)
+    token = token.replace("$HOME", HOME)
     if token.startswith("~"):
         token = HOME + token[1:]
     if not token.startswith("/"):
@@ -88,7 +106,7 @@ def resolve(token, cwd):
 def shell_targets(cmd, cwd):
     """Row files a shell command writes to (a rough guess: cd, > and >>, mv/cp/rm/touch/tee/ln, sed -i).
     Heredoc bodies and scripts run by python are not followed."""
-    out = []
+    out, env = [], shell_vars(cmd.split("<<", 1)[0])
     for seg in re.split(r"&&|\|\||;|\n|\|", cmd.split("<<", 1)[0]):
         seg = seg.strip()
         try:
@@ -98,7 +116,7 @@ def shell_targets(cmd, cwd):
         if not toks:
             continue
         if toks[0] == "cd" and len(toks) > 1:
-            cwd = resolve(toks[1], cwd)
+            cwd = resolve(toks[1], cwd, env)
             continue
         redirects = REDIRECT.findall(seg)
         whole = {t for op, t in redirects if op == ">"}  # "> file" writes the whole file
@@ -111,7 +129,7 @@ def shell_targets(cmd, cwd):
         elif toks[0] == "sed" and any(t.startswith("-i") for t in toks):
             targets += args[1:]
         for t in targets:
-            p = resolve(t, cwd)
+            p = resolve(t, cwd, env)
             if p and row_of(p):
                 out.append((p, one_line(seg), t in whole))
     return out
@@ -120,12 +138,12 @@ def shell_targets(cmd, cwd):
 HEREDOC = re.compile(r"""cat\s+(?:>\s*([^\s<>;&|]+)\s*<<(-?)\s*(['"]?)(\w+)\3|<<(-?)\s*(['"]?)(\w+)\6\s*>\s*([^\s<>;&|]+))[^\n]*\n""")
 
 
-def cwd_after(text, cwd):
+def cwd_after(text, cwd, env=None):
     """The folder after the cd commands in a piece of shell."""
     for seg in re.split(r"&&|\|\||;|\n|\|", text):
         toks = seg.strip().split()
         if len(toks) > 1 and toks[0] == "cd":
-            cwd = resolve(toks[1], cwd)
+            cwd = resolve(toks[1], cwd, env)
     return cwd
 
 
@@ -148,7 +166,8 @@ def heredoc_writes(cmd, cwd):
         pos = end.end()
         if dash:
             body = re.sub(r"^\t+", "", body, flags=re.M)
-        p = resolve(target, cwd_after(prefix, cwd))
+        env = shell_vars(prefix)
+        p = resolve(target, cwd_after(prefix, cwd, env), env)
         if p and row_of(p) and (quote or not re.search(r"[$`\\]", body)):
             out.append((p, body))
     return out
